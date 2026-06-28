@@ -4,9 +4,9 @@ let stockData = [];
 let portfolioData = [];
 
 // Initialize sql.js
-async function initSqlJs() {
+async function initSqlJsLib() {
     try {
-        const SQL = await initSqlJs({
+        const SQL = await initSqlJsLib({
             locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
         });
         return SQL;
@@ -28,7 +28,7 @@ async function loadDatabase() {
         
         const dbArrayBuffer = await response.arrayBuffer();
         
-        const SQL = await initSqlJs();
+        const SQL = await initSqlJsLib();
         db = new SQL.Database(new Uint8Array(dbArrayBuffer));
         
         console.log("Database loaded successfully");
