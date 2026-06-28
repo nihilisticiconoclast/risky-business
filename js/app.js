@@ -21,7 +21,7 @@ async function loadDatabase() {
     showLoading();
     
     try {
-        const response = await fetch('data/processed/finance_data.db');
+        const response = await fetch('data/processed/finance_data.sqlite');
         if (!response.ok) {
             throw new Error(`Failed to fetch database: ${response.status} ${response.statusText}`);
         }
@@ -41,7 +41,7 @@ async function loadDatabase() {
         document.getElementById('portfolio-summary').innerHTML = `
             <div class="error">
                 <strong>Error loading database:</strong> ${err.message}<br>
-                Please ensure the database file exists at data/processed/finance_data.db
+                Please ensure the database file exists at data/processed/finance_data.sqlite
             </div>
         `;
     } finally {
