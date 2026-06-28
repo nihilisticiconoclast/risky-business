@@ -38,10 +38,14 @@ async function loadDatabase() {
         
     } catch (err) {
         console.error("Failed to load database:", err);
+        console.error("Stack:", err.stack);
         document.getElementById('portfolio-summary').innerHTML = `
-            <div class="error">
-                <strong>Error loading database:</strong> ${err.message}<br>
-                Please ensure the database file exists at data/processed/finance_data.sqlite
+            <div class="error" style="color: red; padding: 20px; font-family: monospace;">
+                <strong>Error loading database:</strong><br>
+                ${err.message}<br><br>
+                <small>Stack: ${err.stack}</small><br>
+                <small>SQL object exists: ${typeof SQL !== 'undefined'}</small><br>
+                <small>initSqlJs exists: ${typeof initSqlJs !== 'undefined'}</small>
             </div>
         `;
     } finally {
