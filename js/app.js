@@ -7,7 +7,7 @@ let portfolioData = [];
 async function initSqlJsLib() {
     try {
         const SQL = await initSqlJs({
-            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/${file}`
         });
         return SQL;
     } catch (err) {
