@@ -21,7 +21,7 @@ async function loadDatabase() {
     showLoading();
     
     try {
-        const response = await fetch('data/processed/finance_data.sqlite');
+        const response = await fetch('https://raw.githubusercontent.com/nihilisticiconoclast/risky-business/main/data/processed/finance_data.sqlite');
         if (!response.ok) {
             throw new Error(`Failed to fetch database: ${response.status} ${response.statusText}`);
         }
