@@ -6,9 +6,9 @@ let portfolioData = [];
 // Initialize sql.js
 async function initSqlJsLib() {
     try {
-        const SQL = await initSqlJs({
-            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/${file}`
-        });
+        // For sql.js v1 loaded via script tag, just call initSqlJs()
+        // without arguments - it uses default WASM paths
+        const SQL = await initSqlJs();
         return SQL;
     } catch (err) {
         console.error("Failed to load sql.js:", err);
@@ -21,7 +21,7 @@ async function loadDatabase() {
     showLoading();
     
     try {
-        const response = await fetch('https://raw.githubusercontent.com/nihilisticiconoclast/risky-business/main/data/processed/finance_data.sqlite');
+        const response = await fetch('data/processed/finance_data.sqlite');
         if (!response.ok) {
             throw new Error(`Failed to fetch database: ${response.status} ${response.statusText}`);
         }
