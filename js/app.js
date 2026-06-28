@@ -7,9 +7,8 @@ let portfolioData = [];
 async function initSqlJsLib() {
     try {
         // For sql-wasm.js from sql.js.org CDN
-        const SQL = await initSqlJs({
-            locateFile: file => `https://sql.js.org/dist/${file}`
-        });
+        // Just call initSqlJs() without arguments - it auto-loads WASM
+        const SQL = await initSqlJs();
         return SQL;
     } catch (err) {
         console.error("Failed to load sql.js:", err);
