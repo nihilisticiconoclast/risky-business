@@ -4,12 +4,18 @@ let stockData = [];
 let portfolioData = [];
 
 // Initialize sql.js
-// For sql-all.js, we still need to call initSqlJs()
+// Using the newer sql-wasm.js which exposes initSqlJs as a global
 async function initSqlJsLib() {
     try {
-        // sql-all.js includes WASM inline, so no locateFile needed
-        const SQL = await initSqlJs();
-        return SQL;
+        // Check if initSqlJs is available as a global
+        if (typeof initSqlJs === 'function') {
+            const SQL = await initSqlJs({
+                locateFile: file => `https://sql.js.org/dist/${file}`
+            });
+            return SQL;
+        } else {
+            throw new Error('initSqlJs is not defined. Check sql.js CDN URL.');
+        }
     } catch (err) {
         console.error("Failed to load sql.js:", err);
         throw err;
