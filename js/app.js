@@ -4,13 +4,16 @@ let stockData = [];
 let portfolioData = [];
 
 // Initialize sql.js
-// sql-all.js creates a global SQL object, no initialization needed
-function initSqlJsLib() {
-    // sql-all.js loads everything synchronously, so SQL is available immediately
-    if (typeof SQL === 'undefined') {
-        throw new Error('SQL object not available. sql-all.js failed to load.');
+// For sql-all.js, we still need to call initSqlJs()
+async function initSqlJsLib() {
+    try {
+        // sql-all.js includes WASM inline, so no locateFile needed
+        const SQL = await initSqlJs();
+        return SQL;
+    } catch (err) {
+        console.error("Failed to load sql.js:", err);
+        throw err;
     }
-    return Promise.resolve(SQL);
 }
 
 // Load database
