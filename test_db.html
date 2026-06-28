@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test DB</title>
+    <script src="https://sql.js.org/dist/sql-wasm.js"></script>
+</head>
+<body>
+    <h1>Testing Database</h1>
+    <div id="output"></div>
+    <script>
+        async function test() {
+            const SQL = await initSqlJs({ locateFile: file => `https://sql.js.org/dist/${file}` });
+            
+            const response = await fetch('data/processed/finance_data.sqlite');
+            const dbArrayBuffer = await response.arrayBuffer();
+            const db = new SQL.Database(new Uint8Array(dbArrayBuffer));
+            
+            const stmt = db.prepare("SELECT DISTINCT symbol, name FROM stocks ORDER BY symbol LIMIT 3");
+            const output = document.getElementById('output');
+            
+            while (stmt.step()) {
+                const row = stmt.get();
+                output.innerHTML += `<p>Row: ${JSON.stringify(row)}</p>`;
+                output.innerHTML += `<p>symbol: ${row.symbol}, name: ${row.name}</p>`;
+            }
+            stmt.free();
+        }
+        test();
+    </script>
+</body>
+</html>

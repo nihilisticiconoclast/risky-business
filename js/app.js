@@ -38,9 +38,13 @@ async function loadDatabase() {
         db = new SQL.Database(new Uint8Array(dbArrayBuffer));
         
         console.log("Database loaded successfully");
-        loadStockList();
-        loadPortfolioSummary();
-        loadAllStockMetrics();
+        
+        // Now load data using the database
+        await Promise.all([
+            loadStockList(),
+            loadPortfolioSummary(),
+            loadAllStockMetrics()
+        ]);
         
     } catch (err) {
         console.error("Failed to load database:", err);
@@ -77,21 +81,36 @@ function hideLoading() {
 // Load stock list for dropdown
 function loadStockList() {
     try {
+        if (!db) {
+            console.error("Database not initialized");
+            return;
+        }
+        
         const stmt = db.prepare("SELECT DISTINCT symbol, name FROM stocks ORDER BY symbol");
         const stocks = [];
         while (stmt.step()) {
             const row = stmt.get();
+            // In sql.js, column names are lowercase
+            console.log("Row:", row);
             stocks.push(row);
         }
         stmt.free();
         
         const select = document.getElementById('stock-select');
+        if (!select) {
+            console.error("stock-select element not found");
+            return;
+        }
+        
         select.innerHTML = '<option value="">-- Select a stock --</option>';
         
         stocks.forEach(stock => {
             const option = document.createElement('option');
-            option.value = stock.symbol;
-            option.textContent = `${stock.symbol} - ${stock.name || stock.symbol}`;
+            // Use lowercase property names as sql.js returns them
+            const symbol = stock.symbol || stock.SYMBOL || 'Unknown';
+            const name = stock.name || stock.NAME || 'Unknown';
+            option.value = symbol;
+            option.textContent = `${symbol} - ${name}`;
             select.appendChild(option);
         });
         
@@ -104,6 +123,11 @@ function loadStockList() {
 // Load all stock metrics for portfolio tab
 function loadAllStockMetrics() {
     try {
+        if (!db) {
+            console.error("Database not initialized");
+            return;
+        }
+        
         const stmt = db.prepare("SELECT * FROM stock_risk_metrics ORDER BY symbol");
         stockData = [];
         while (stmt.step()) {
@@ -121,6 +145,11 @@ function loadAllStockMetrics() {
 // Load portfolio summary
 function loadPortfolioSummary() {
     try {
+        if (!db) {
+            console.error("Database not initialized");
+            return;
+        }
+        
         const stmt = db.prepare(`
             SELECT * FROM portfolio_risk_metrics 
             WHERE portfolio_id = 1
