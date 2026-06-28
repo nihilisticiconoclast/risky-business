@@ -42,7 +42,6 @@ ENV/
 
 # Data
 /data/raw/*.csv
-data/processed/*.db
 
 # Output
 r/output/*.html

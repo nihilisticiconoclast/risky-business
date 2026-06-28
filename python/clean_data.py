@@ -11,7 +11,7 @@ def clean_stock_data():
     
     # Load combined data
     try:
-        df = pd.read_csv('data/raw/all_prices.csv', index_col=0)
+        df = pd.read_csv('data/raw/all_prices.csv')
         print(f"  Loaded {len(df)} rows of data")
     except FileNotFoundError:
         print("  Error: all_prices.csv not found. Run download_data.py first.")
@@ -30,8 +30,7 @@ def clean_stock_data():
     df = df.drop_duplicates()
     
     # Ensure we have required columns
-    required_columns = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 
-                       'Stock Splits', 'symbol']
+    required_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits', 'symbol']
     
     for col in required_columns:
         if col not in df.columns:
@@ -44,6 +43,7 @@ def clean_stock_data():
     
     # Rename columns to lowercase for consistency
     df = df.rename(columns={
+        'Date': 'date',
         'Open': 'open',
         'High': 'high', 
         'Low': 'low',
@@ -54,15 +54,14 @@ def clean_stock_data():
         'Adj Close': 'adjusted_close'
     })
     
-    # Convert date index to datetime if it's a string
-    if isinstance(df.index, pd.RangeIndex):
-        df.index = pd.to_datetime(df.index)
+    # Convert date to string format (handle timezone by converting to UTC first)
+    df['date'] = pd.to_datetime(df['date'], utc=True).dt.tz_localize(None).dt.strftime('%Y-%m-%d')
     
     # Sort by symbol and date
-    df = df.sort_values(['symbol', df.index])
+    df = df.sort_values(['symbol', 'date'])
     
     # Save cleaned data
-    df.to_csv('data/processed/cleaned_prices.csv', index=True)
+    df.to_csv('data/processed/cleaned_prices.csv', index=False)
     print(f"  Saved cleaned data to data/processed/cleaned_prices.csv")
     print(f"  Final shape: {df.shape}")
     print(f"  Missing values after cleaning: {df.isnull().sum().sum()}")
