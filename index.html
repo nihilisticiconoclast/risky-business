@@ -4,73 +4,89 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Risk Metrics Dashboard</title>
-    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Tunnel Design System - Locked Layer -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/nihilisticiconoclast/cuddly-lamp@main/assets/tokens.css">
+    
     <!-- Plotly.js from CDN -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <!-- sql.js from CDN - using newer version -->
+    <!-- sql.js from CDN -->
     <script src="https://sql.js.org/dist/sql-wasm.js"></script>
+    
+    <!-- Local styles -->
+    <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Risk Metrics Dashboard</h1>
-            <p>Interactive financial risk analysis using SQL, R, Python & JavaScript</p>
+<body data-seed="risk-metrics-dashboard">
+    <div class="wrap">
+        <header class="masthead">
+            <div class="brand">
+                <!-- the FIXED house mark / logo (same on every page) -->
+                <span class="sig" id="sig"></span>
+                <div class="wordmark">
+                    <span style="font-family: var(--font-display); font-size: var(--step-2); font-weight: 560;">Risk Metrics</span>
+                    <span style="font-family: var(--font-data); font-size: var(--step--1); letter-spacing: .16em; text-transform: uppercase; color: var(--contour); display: block;">Dashboard</span>
+                </div>
+            </div>
+            <nav class="nav-tabs">
+                <button class="tab-button active" onclick="showTab('overview')">Overview</button>
+                <button class="tab-button" onclick="showTab('stocks')">Stock Analysis</button>
+                <button class="tab-button" onclick="showTab('portfolio')">Portfolio</button>
+                <button class="tab-button" onclick="showTab('query')">SQL Query</button>
+            </nav>
         </header>
 
-        <nav class="tabs">
-            <button class="tab-button active" onclick="showTab('overview')">Overview</button>
-            <button class="tab-button" onclick="showTab('stocks')">Stock Analysis</button>
-            <button class="tab-button" onclick="showTab('portfolio')">Portfolio</button>
-            <button class="tab-button" onclick="showTab('query')">SQL Query</button>
-        </nav>
+        <!-- the per-page doodle: random per page, static once loaded -->
+        <div class="doodle" id="doodle"></div>
 
-        <div id="overview" class="tab-content">
-            <h2>Portfolio Summary</h2>
-            <div id="portfolio-summary"></div>
-            <div id="portfolio-visualizations"></div>
-        </div>
-
-        <div id="stocks" class="tab-content" style="display: none;">
-            <h2>Individual Stock Risk Metrics</h2>
-            <div id="stock-selector">
-                <label for="stock-select">Select Stock:</label>
-                <select id="stock-select" onchange="loadStockMetrics()">
-                    <option value="">-- Select a stock --</option>
-                </select>
+        <main>
+            <div id="overview" class="tab-content">
+                <h2>Portfolio Summary</h2>
+                <div id="portfolio-summary"></div>
+                <div id="portfolio-visualizations"></div>
             </div>
-            <div id="stock-metrics"></div>
-            <div id="stock-price-chart"></div>
-            <div id="stock-returns-chart"></div>
-        </div>
 
-        <div id="portfolio" class="tab-content" style="display: none;">
-            <h2>Portfolio Analysis</h2>
-            <div class="viz-container">
-                <div class="viz-box">
-                    <h3>Risk-Return Profile</h3>
-                    <div id="risk-return-scatter"></div>
+            <div id="stocks" class="tab-content" style="display: none;">
+                <h2>Individual Stock Risk Metrics</h2>
+                <div id="stock-selector">
+                    <label for="stock-select">Select Stock:</label>
+                    <select id="stock-select" onchange="loadStockMetrics()">
+                        <option value="">-- Select a stock --</option>
+                    </select>
                 </div>
-                <div class="viz-box">
-                    <h3>Volatility Comparison</h3>
-                    <div id="volatility-chart"></div>
-                </div>
+                <div id="stock-metrics"></div>
+                <div id="stock-price-chart"></div>
+                <div id="stock-returns-chart"></div>
             </div>
-            <div class="viz-container">
-                <div class="viz-box">
-                    <h3>Sharpe Ratio Comparison</h3>
-                    <div id="sharpe-chart"></div>
+
+            <div id="portfolio" class="tab-content" style="display: none;">
+                <h2>Portfolio Analysis</h2>
+                <div class="viz-container">
+                    <div class="viz-box">
+                        <h3>Risk-Return Profile</h3>
+                        <div id="risk-return-scatter"></div>
+                    </div>
+                    <div class="viz-box">
+                        <h3>Volatility Comparison</h3>
+                        <div id="volatility-chart"></div>
+                    </div>
                 </div>
-                <div class="viz-box">
-                    <h3>Max Drawdown Comparison</h3>
-                    <div id="drawdown-chart"></div>
+                <div class="viz-container">
+                    <div class="viz-box">
+                        <h3>Sharpe Ratio Comparison</h3>
+                        <div id="sharpe-chart"></div>
+                    </div>
+                    <div class="viz-box">
+                        <h3>Max Drawdown Comparison</h3>
+                        <div id="drawdown-chart"></div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div id="query" class="tab-content" style="display: none;">
-            <h2>Custom SQL Query</h2>
-            <div class="query-container">
-                <textarea id="sql-query" rows="10" placeholder="SELECT * FROM stock_risk_metrics;
+            <div id="query" class="tab-content" style="display: none;">
+                <h2>Custom SQL Query</h2>
+                <div class="query-container">
+                    <textarea id="sql-query" rows="10" placeholder="SELECT * FROM stock_risk_metrics;
 
 Other tables available:
 - stocks: symbol, name, sector, industry
@@ -79,17 +95,29 @@ Other tables available:
 - portfolio_holdings: id, portfolio_id, symbol, quantity, purchase_date, purchase_price
 - stock_risk_metrics: symbol, mean_return, volatility, sharpe_ratio, max_drawdown, var_95, beta, observations
 - portfolio_risk_metrics: portfolio_id, mean_return, volatility, sharpe_ratio, max_drawdown"></textarea>
-                <button onclick="runQuery()">Run Query</button>
-                <button onclick="clearQuery()" style="background: #6c757d;">Clear</button>
+                    <button class="btn btn--route" onclick="runQuery()">Run Query</button>
+                    <button class="btn" onclick="clearQuery()">Clear</button>
+                </div>
+                <div id="query-results"></div>
             </div>
-            <div id="query-results"></div>
-        </div>
+        </main>
 
-        <footer>
-            <p>Data: Yahoo Finance | Built with SQL, R, Python, JavaScript | <a href="https://github.com/nihilisticiconoclast/risky-business" target="_blank">View on GitHub</a></p>
+        <footer class="masthead" style="border-top: var(--rule); border-bottom: none; margin-top: 2rem;">
+            <div class="brand">
+                <span class="sig" id="sig-footer"></span>
+                <span class="wordmark" style="font-size: var(--step--1);">Risk Metrics Dashboard</span>
+            </div>
+            <div style="font-family: var(--font-data); font-size: var(--step--1); color: var(--contour);">
+                Data: Yahoo Finance | Built with SQL, R, Python, JavaScript | 
+                <a href="https://github.com/nihilisticiconoclast/risky-business" target="_blank">View on GitHub</a>
+            </div>
         </footer>
     </div>
 
+    <!-- Tunnel Figure JS -->
+    <script src="https://cdn.jsdelivr.net/gh/nihilisticiconoclast/cuddly-lamp@main/assets/tunnel-figure.js"></script>
+    
+    <!-- Local JS -->
     <script src="js/app.js"></script>
 </body>
 </html>

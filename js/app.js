@@ -46,7 +46,7 @@ async function loadDatabase() {
         console.error("Failed to load database:", err);
         console.error("Stack:", err.stack);
         document.getElementById('portfolio-summary').innerHTML = `
-            <div class="error" style="color: red; padding: 20px; font-family: monospace;">
+            <div class="error">
                 <strong>Error loading database:</strong><br>
                 ${err.message}<br><br>
                 <small>Stack: ${err.stack}</small><br>
@@ -201,7 +201,7 @@ function loadVisualizations() {
         try {
             const frame = document.createElement('iframe');
             frame.src = viz.file;
-            frame.style = 'width: 100%; height: 500px; border: none; border-radius: 8px; margin-bottom: 20px;';
+            frame.style = 'width: 100%; height: 500px; border: none; border-radius: 0; margin-bottom: 20px;';
             frame.onerror = function() {
                 this.style.display = 'none';
             };
@@ -222,8 +222,8 @@ function createPortfolioCharts() {
         y: stockData.map(s => s.volatility * 100),
         type: 'bar',
         marker: {
-            color: '#1f77b4',
-            line: { color: 'white', width: 1 }
+            color: '#C0432B',  // Using Tunnel's --route color
+            line: { color: '#4A3823', width: 1 }  // Using Tunnel's --ink color
         },
         text: stockData.map(s => `${(s.volatility * 100).toFixed(2)}%<br>Obs: ${s.observations}`),
         hoverinfo: 'text+y'
@@ -233,7 +233,10 @@ function createPortfolioCharts() {
         title: 'Annualized Volatility by Stock',
         xaxis: { title: 'Stock' },
         yaxis: { title: 'Volatility (%)' },
-        showlegend: false
+        showlegend: false,
+        plot_bgcolor: '#EDE7D3',  // Tunnel's --paper
+        paper_bgcolor: '#EDE7D3',
+        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
     };
     
     Plotly.newPlot('volatility-chart', volatilityData, volatilityLayout, {responsive: true});
@@ -245,7 +248,7 @@ function createPortfolioCharts() {
         type: 'bar',
         marker: {
             color: stockData.map(s => s.sharpe_ratio || 0),
-            colorscale: 'RdYlGn',
+            colorscale: [[0, '#C0432B'], [0.5, '#EDE7D3'], [1, '#3E7C8C']],
             showscale: true,
             colorbar: { title: 'Sharpe Ratio' }
         },
@@ -257,7 +260,10 @@ function createPortfolioCharts() {
         title: 'Sharpe Ratio by Stock',
         xaxis: { title: 'Stock' },
         yaxis: { title: 'Sharpe Ratio' },
-        showlegend: false
+        showlegend: false,
+        plot_bgcolor: '#EDE7D3',
+        paper_bgcolor: '#EDE7D3',
+        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
     };
     
     Plotly.newPlot('sharpe-chart', sharpeData, sharpeLayout, {responsive: true});
@@ -268,8 +274,8 @@ function createPortfolioCharts() {
         y: stockData.map(s => s.max_drawdown * 100),
         type: 'bar',
         marker: {
-            color: '#d62728',
-            line: { color: 'white', width: 1 }
+            color: '#C0432B',
+            line: { color: '#4A3823', width: 1 }
         },
         text: stockData.map(s => `${(s.max_drawdown * 100).toFixed(2)}%<br>Obs: ${s.observations}`),
         hoverinfo: 'text+y'
@@ -279,7 +285,10 @@ function createPortfolioCharts() {
         title: 'Maximum Drawdown by Stock',
         xaxis: { title: 'Stock' },
         yaxis: { title: 'Max Drawdown (%)' },
-        showlegend: false
+        showlegend: false,
+        plot_bgcolor: '#EDE7D3',
+        paper_bgcolor: '#EDE7D3',
+        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
     };
     
     Plotly.newPlot('drawdown-chart', drawdownData, drawdownLayout, {responsive: true});
@@ -292,14 +301,14 @@ function createPortfolioCharts() {
         type: 'scatter',
         text: stockData.map(s => s.symbol),
         textposition: 'top center',
-        textfont: { size: 12 },
+        textfont: { size: 12, family: 'IBM Plex Mono, monospace' },
         marker: {
             size: stockData.map(s => Math.max(10, s.observations / 50)),
             color: stockData.map(s => s.sharpe_ratio || 0),
             colorscale: 'Viridis',
             showscale: true,
             colorbar: { title: 'Sharpe Ratio' },
-            line: { color: 'white', width: 1 }
+            line: { color: '#4A3823', width: 1 }
         },
         hoverinfo: 'text+x+y+name'
     }];
@@ -308,7 +317,10 @@ function createPortfolioCharts() {
         title: 'Risk-Return Profile',
         xaxis: { title: 'Annualized Return (%)' },
         yaxis: { title: 'Annualized Volatility (%)' },
-        showlegend: false
+        showlegend: false,
+        plot_bgcolor: '#EDE7D3',
+        paper_bgcolor: '#EDE7D3',
+        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
     };
     
     Plotly.newPlot('risk-return-scatter', scatterData, scatterLayout, {responsive: true});
@@ -445,14 +457,17 @@ function loadStockPriceHistory(symbol) {
             type: 'scatter',
             mode: 'lines',
             name: symbol,
-            line: { color: '#667eea', width: 2 }
+            line: { color: '#C0432B', width: 2 }  // Tunnel's --route color
         };
         
         const priceLayout = {
             title: `${symbol} Price History`,
             xaxis: { title: 'Date' },
             yaxis: { title: 'Price ($)' },
-            hovermode: 'x unified'
+            hovermode: 'x unified',
+            plot_bgcolor: '#EDE7D3',
+            paper_bgcolor: '#EDE7D3',
+            font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
         };
         
         Plotly.newPlot('stock-price-chart', [priceTrace], priceLayout, {responsive: true});
@@ -471,14 +486,17 @@ function loadStockPriceHistory(symbol) {
             type: 'scatter',
             mode: 'lines',
             name: 'Daily Returns',
-            line: { color: '#d62728', width: 1 }
+            line: { color: '#3E7C8C', width: 1 }  // Tunnel's --incident color
         };
         
         const returnLayout = {
             title: `${symbol} Daily Returns (%)`,
             xaxis: { title: 'Date' },
             yaxis: { title: 'Return (%)' },
-            hovermode: 'x unified'
+            hovermode: 'x unified',
+            plot_bgcolor: '#EDE7D3',
+            paper_bgcolor: '#EDE7D3',
+            font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
         };
         
         Plotly.newPlot('stock-returns-chart', [returnTrace], returnLayout, {responsive: true});
@@ -603,8 +621,46 @@ function showTab(tabName) {
     event.target.classList.add('active');
 }
 
+// Initialize Tunnel signature figures
+function initTunnelSignature() {
+    try {
+        // Check if TunnelFigure is available
+        if (typeof TunnelFigure !== 'undefined') {
+            // The fixed house logo in the masthead (seed ignored - same on every page)
+            const sigElement = document.getElementById('sig');
+            if (sigElement) {
+                sigElement.innerHTML = TunnelFigure.tunnelFigureSVG(null, { variant: 'mark' });
+            }
+            
+            // The fixed house logo in the footer (seed ignored - same on every page)
+            const sigFooterElement = document.getElementById('sig-footer');
+            if (sigFooterElement) {
+                sigFooterElement.innerHTML = TunnelFigure.tunnelFigureSVG(null, { variant: 'mark' });
+            }
+            
+            // The per-page doodle: seeded from the page, so it's unique here but stable on reload
+            const doodleElement = document.getElementById('doodle');
+            if (doodleElement) {
+                const seed = document.body.dataset.seed || location.pathname || document.title;
+                doodleElement.innerHTML = TunnelFigure.tunnelFigureSVG(seed, { variant: 'doodle' });
+                TunnelFigure.placeDoodle(doodleElement);
+            }
+            
+            console.log("Tunnel signature initialized");
+        } else {
+            console.warn("TunnelFigure not available - signature will not be displayed");
+        }
+    } catch (err) {
+        console.error("Error initializing Tunnel signature:", err);
+    }
+}
+
 // Initialize on page load
 window.onload = function() {
+    // Initialize Tunnel signature first
+    initTunnelSignature();
+    
+    // Then load the database
     loadDatabase().catch(err => {
         console.error("Failed to initialize dashboard:", err);
         document.body.innerHTML = '<div class="error" style="text-align: center; padding: 50px;">' +
