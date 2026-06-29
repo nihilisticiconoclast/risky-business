@@ -30,14 +30,16 @@ import math
 import os
 import sqlite3
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 
 # Configuration ---------------------------------------------------------------
 TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JPM', 'V', 'PG', 'DIS']
-YEARS_OF_HISTORY = 3
+YEARS_OF_HISTORY = 10  # Stooq serves decades of free daily history, no key
 TRADING_DAYS = 252  # for annualization
+REQUEST_DELAY_SECONDS = 1.0  # be polite to Stooq between requests
 DB_PATH = 'data/processed/finance_data.db'
 
 STOCK_INFO = [
@@ -310,13 +312,16 @@ def main():
     print(f"Fetching real prices from Stooq ({start:%Y-%m-%d} to {end:%Y-%m-%d})...")
 
     price_data, failures = {}, []
-    for ticker in TICKERS:
+    for i, ticker in enumerate(TICKERS):
+        if i:
+            time.sleep(REQUEST_DELAY_SECONDS)
         try:
             rows = fetch_prices(ticker, start, end)
             if not rows:
                 raise ValueError('no rows returned')
             price_data[ticker] = rows
-            print(f"  {ticker}: {len(rows)} trading days")
+            print(f"  {ticker}: {len(rows)} trading days "
+                  f"({rows[0]['date']} to {rows[-1]['date']})")
         except (urllib.error.URLError, ValueError, TimeoutError) as e:
             failures.append((ticker, str(e)))
             print(f"  {ticker}: FAILED ({e})")
