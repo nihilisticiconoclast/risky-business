@@ -42,12 +42,23 @@ python python/fetch_real_data.py
 python -m http.server 8000
 ```
 
-This downloads ~3 years of daily prices for the configured tickers from
+This downloads ~10 years of daily prices for the configured tickers from
 [Stooq](https://stooq.com), a free source that needs **no API key and no
 signup**, then computes volatility, Sharpe ratio, VaR, max drawdown, and beta
 directly from the fetched prices and writes the same database schema the
 dashboard reads. If the network is unavailable it exits cleanly and leaves the
-existing database untouched.
+existing database untouched. (Adjust `YEARS_OF_HISTORY` in the script to change
+the window.)
+
+#### Automatic refresh (GitHub Actions)
+
+`.github/workflows/update-data.yml` runs `fetch_real_data.py` on a schedule
+(weekdays, after the US close) and commits the refreshed database back to the
+branch, so GitHub Pages always shows current data. It needs no secrets because
+Stooq is key-free. You can also trigger it manually from the **Actions** tab
+(*Update market data → Run workflow*). Scheduled workflows are paused by GitHub
+after ~60 days of repository inactivity — push a commit or run it manually to
+re-enable.
 
 #### Free data providers
 

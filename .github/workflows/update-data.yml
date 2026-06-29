@@ -1,0 +1,49 @@
+name: Update market data
+
+# Refreshes the dashboard's SQLite database with real prices from Stooq and
+# commits it back to the branch. GitHub Pages then redeploys automatically.
+#
+# Stooq is free and needs no API key, so no repository secrets are required.
+# Note: scheduled workflows are paused by GitHub after ~60 days of repo
+# inactivity — push any commit (or run it manually) to re-enable.
+
+on:
+  schedule:
+    # 23:00 UTC on weekdays, after US markets close and EOD data is posted.
+    - cron: '0 23 * * 1-5'
+  workflow_dispatch: {}  # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+# Avoid overlapping runs racing to push the database.
+concurrency:
+  group: update-market-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Fetch real market data (stdlib only, no dependencies)
+        run: python python/fetch_real_data.py
+
+      - name: Commit updated database if it changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/processed/finance_data.sqlite
+          if git diff --staged --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "Auto-update market data ($(date -u +%Y-%m-%d))"
+            git push
+          fi
