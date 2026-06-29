@@ -16,6 +16,22 @@ An interactive financial dashboard for analyzing portfolio risk metrics using SQ
 
 ## Setup
 
+### Quick start (sample data, no external dependencies)
+
+The dashboard ships with a generated sample database, so you can run it
+immediately. To regenerate that database from scratch using only the Python
+standard library (no `pandas`, `yfinance`, or R required):
+
+```bash
+python python/generate_sample_data.py
+python -m http.server 8000
+# Then open http://localhost:8000
+```
+
+This produces the full schema (`stocks`, `prices`, `portfolio_holdings`,
+`stock_risk_metrics`, `portfolio_risk_metrics`) with reproducible mock data.
+The full pipeline below is only needed if you want real market data.
+
 ### Prerequisites
 
 - Python 3.8+
