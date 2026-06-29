@@ -30,7 +30,38 @@ python -m http.server 8000
 
 This produces the full schema (`stocks`, `prices`, `portfolio_holdings`,
 `stock_risk_metrics`, `portfolio_risk_metrics`) with reproducible mock data.
-The full pipeline below is only needed if you want real market data.
+
+### Real market data (free, no API key)
+
+To replace the mock data with **real** prices and risk metrics computed from
+them, run the standalone fetcher (standard library only — no `pandas`,
+`yfinance`, or R):
+
+```bash
+python python/fetch_real_data.py
+python -m http.server 8000
+```
+
+This downloads ~3 years of daily prices for the configured tickers from
+[Stooq](https://stooq.com), a free source that needs **no API key and no
+signup**, then computes volatility, Sharpe ratio, VaR, max drawdown, and beta
+directly from the fetched prices and writes the same database schema the
+dashboard reads. If the network is unavailable it exits cleanly and leaves the
+existing database untouched.
+
+#### Free data providers
+
+| Provider | API key? | Notes |
+|----------|----------|-------|
+| **Stooq** (default) | No | No signup; daily OHLCV via CSV. Used by `fetch_real_data.py`. |
+| Yahoo Finance (`yfinance`) | No | Unofficial; rate-limited/blocked at times. Used by the legacy `download_data.py`. |
+| [Alpha Vantage](https://www.alphavantage.co) | Yes (free) | 25 requests/day on the free tier. |
+| [Tiingo](https://www.tiingo.com) | Yes (free) | Generous free tier; good EOD history. |
+| [Twelve Data](https://twelvedata.com) | Yes (free) | ~800 requests/day on the free tier. |
+
+To switch providers, edit only the `fetch_prices()` function in
+`python/fetch_real_data.py` — it is the single provider-specific piece; the
+rest of the pipeline is provider-agnostic.
 
 ### Prerequisites
 
@@ -104,13 +135,18 @@ risky-business/
 
 ## Data Sources
 
-- **Yahoo Finance**: Historical stock prices (via yfinance)
-- **Free tier**: No API keys required for basic functionality
+- **Stooq** (default for `fetch_real_data.py`): Free daily prices, no API key
+- **Yahoo Finance** (legacy `download_data.py`): Historical prices via `yfinance`
+- Other free options (Alpha Vantage, Tiingo, Twelve Data) — see
+  [Real market data](#real-market-data-free-no-api-key) for the comparison
+  table and how to swap providers
 
 ## Customization
 
 ### Add New Stocks
-Edit `python/download_data.py` and add symbols to the `TICKERS` list.
+Edit the `TICKERS` list in `python/fetch_real_data.py` (real data) or
+`python/download_data.py` (legacy yfinance path), and add a matching row to
+`STOCK_INFO` so the new symbol gets a name/sector.
 
 ### Modify Portfolio
 Edit the sample portfolio in `python/build_database.py` or create new entries in the SQLite database.
