@@ -73,6 +73,9 @@ def generate_stock_prices(symbol, dates):
 def generate_sample_database():
     """Generate a sample SQLite database with mock financial data."""
     print("Generating sample financial database...")
+
+    # Seed the RNG so the generated database is reproducible across runs.
+    random.seed(42)
     
     # Create directories if they don't exist
     os.makedirs('data/processed', exist_ok=True)
