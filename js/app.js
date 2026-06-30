@@ -672,6 +672,7 @@ let myHoldings = [];            // [{symbol, weight}]
 const returnsCache = {};        // symbol -> Map(date -> daily return)
 let marketReturnsCache = null;  // Map(date -> equal-weight market return)
 let lastPortfolioReturns = null; // daily returns of the last calculated portfolio
+let lastPortfolioAssets = null;  // {symbols, weights, matrix} for per-asset MC
 
 // --- small stats helpers (mirror python/fetch_real_data.py) ---
 function pfMean(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
@@ -900,6 +901,12 @@ function calculatePortfolio() {
 
     // Enable the Monte Carlo section now that we have a portfolio return series.
     lastPortfolioReturns = rets;
+    // Per-asset return matrix (T×N) aligned on the shared dates, for correlated MC.
+    lastPortfolioAssets = {
+        symbols: norm.map(h => h.symbol),
+        weights: norm.map(h => h.w),
+        matrix: dates.map(d => norm.map(h => h.m.get(d)))
+    };
     const mc = document.getElementById('mc-section');
     if (mc) mc.style.display = '';
 }
@@ -911,6 +918,49 @@ function gaussian() {
     while (u === 0) u = Math.random();
     while (v === 0) v = Math.random();
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// Chi-square with k degrees of freedom (k a small integer): sum of k N(0,1)^2.
+function chiSquare(k) {
+    let s = 0;
+    for (let i = 0; i < k; i++) { const z = gaussian(); s += z * z; }
+    return s;
+}
+
+// Standardized Student-t (mean 0, variance 1) with nu>2 degrees of freedom.
+// Lower nu = fatter tails. t = Z / sqrt(W/nu); rescale by sqrt((nu-2)/nu).
+function standardizedT(nu) {
+    return gaussian() * Math.sqrt((nu - 2) / chiSquare(nu));
+}
+
+// Covariance matrix (N×N) of an T×N return matrix given column means mu.
+function covMatrix(matrix, mu) {
+    const T = matrix.length, N = mu.length;
+    const C = Array.from({ length: N }, () => new Float64Array(N));
+    for (let t = 0; t < T; t++) {
+        const row = matrix[t];
+        for (let i = 0; i < N; i++) {
+            const di = row[i] - mu[i];
+            for (let j = i; j < N; j++) C[i][j] += di * (row[j] - mu[j]);
+        }
+    }
+    for (let i = 0; i < N; i++)
+        for (let j = i; j < N; j++) { C[i][j] /= T; C[j][i] = C[i][j]; }
+    return C;
+}
+
+// Cholesky factor L (lower triangular, A = L·Lᵀ); A assumed positive-definite.
+function cholesky(A) {
+    const N = A.length;
+    const L = Array.from({ length: N }, () => new Float64Array(N));
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j <= i; j++) {
+            let s = A[i][j];
+            for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+            L[i][j] = (i === j) ? Math.sqrt(Math.max(s, 1e-12)) : s / (L[j][j] || 1e-12);
+        }
+    }
+    return L;
 }
 
 // Linear-interpolated quantile of an already-sorted ascending array.
@@ -928,14 +978,60 @@ function runMonteCarlo() {
         return;
     }
     const rets = lastPortfolioReturns;
-    const method = document.getElementById('mc-method').value;
+    const dist = document.getElementById('mc-dist').value;   // historical | normal | t
+    const corr = document.getElementById('mc-corr').value;   // blended | perasset
+    const nu = Math.max(3, parseInt(document.getElementById('mc-dof').value, 10) || 5);
     const steps = parseInt(document.getElementById('mc-horizon').value, 10);
     const nPaths = parseInt(document.getElementById('mc-paths').value, 10);
     const start = Math.max(1, parseFloat(document.getElementById('mc-start').value) || 10000);
 
-    // Calibrate GBM on log returns (daily dt).
-    const logrets = rets.map(r => Math.log(1 + r));
-    const muL = pfMean(logrets), sigL = pfPstdev(logrets);
+    // Build a generator that returns one portfolio daily return per call, per
+    // the chosen distribution and asset model.
+    let genStep;
+    const usePerAsset = corr === 'perasset' && lastPortfolioAssets &&
+        lastPortfolioAssets.symbols.length > 0;
+    if (usePerAsset) {
+        const { matrix, weights } = lastPortfolioAssets;
+        const N = weights.length, T = matrix.length;
+        if (dist === 'historical') {
+            // Multivariate bootstrap: resample whole days, preserving cross-asset
+            // correlations and fat tails exactly.
+            genStep = () => {
+                const row = matrix[(Math.random() * T) | 0];
+                let s = 0; for (let i = 0; i < N; i++) s += weights[i] * row[i];
+                return s;
+            };
+        } else {
+            // Correlated parametric: simulate each asset from the covariance
+            // matrix via Cholesky (normal), or a multivariate-t (shared scale).
+            const mu = new Array(N).fill(0);
+            for (let t = 0; t < T; t++) for (let i = 0; i < N; i++) mu[i] += matrix[t][i];
+            for (let i = 0; i < N; i++) mu[i] /= T;
+            const L = cholesky(covMatrix(matrix, mu));
+            genStep = () => {
+                const g = new Array(N);
+                for (let i = 0; i < N; i++) g[i] = gaussian();
+                const scale = dist === 't' ? Math.sqrt((nu - 2) / chiSquare(nu)) : 1;
+                let s = 0;
+                for (let i = 0; i < N; i++) {
+                    let y = 0;
+                    for (let k = 0; k <= i; k++) y += L[i][k] * g[k];
+                    s += weights[i] * (mu[i] + y * scale);
+                }
+                return s;
+            };
+        }
+    } else if (dist === 'historical') {
+        genStep = () => rets[(Math.random() * rets.length) | 0];
+    } else {
+        // Blended GBM on log returns; normal or fat-tailed Student-t innovations.
+        const logrets = rets.map(r => Math.log(1 + r));
+        const muL = pfMean(logrets), sigL = pfPstdev(logrets);
+        genStep = () => {
+            const e = dist === 't' ? standardizedT(nu) : gaussian();
+            return Math.exp(muL + sigL * e) - 1;
+        };
+    }
 
     // Simulate. Keep every path's value at every step for the fan chart.
     const stepValues = Array.from({ length: steps + 1 }, () => new Float64Array(nPaths));
@@ -944,10 +1040,7 @@ function runMonteCarlo() {
         let v = start;
         stepValues[0][p] = v;
         for (let t = 1; t <= steps; t++) {
-            const stepRet = method === 'gbm'
-                ? Math.exp(muL + sigL * gaussian()) - 1
-                : rets[(Math.random() * rets.length) | 0];
-            v *= (1 + stepRet);
+            v *= (1 + genStep());
             stepValues[t][p] = v;
         }
         finals[p] = v;
@@ -981,8 +1074,9 @@ function runMonteCarlo() {
             <div class="metric-card"><h3>Expected Shortfall</h3><p>${money(cvar)}</p><span class="label">Avg of worst 5% (${pct(cvar)}%)</span></div>
         </div>
         <div class="info">${nPaths.toLocaleString()} simulated paths over ${steps} trading days
-            (${(steps / 252).toFixed(steps % 252 ? 2 : 0)} yr) via
-            ${method === 'gbm' ? 'Geometric Brownian Motion' : 'historical bootstrap'}.</div>`;
+            (${(steps / 252).toFixed(steps % 252 ? 2 : 0)} yr) ·
+            ${({ historical: 'historical bootstrap', normal: 'normal GBM', t: `Student-t (ν=${nu})` })[dist]},
+            ${usePerAsset ? `per-asset correlated across ${lastPortfolioAssets.symbols.length} holdings` : 'blended portfolio'}.</div>`;
 
     drawFanChart(steps, bands, start);
     drawHistogram(fsorted, start);
