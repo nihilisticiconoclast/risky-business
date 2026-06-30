@@ -1067,6 +1067,161 @@ function drawAllocationChart(norm) {
     }), { responsive: true });
 }
 
+// ===========================================================================
+// Stock Compass — rank all stocks by current risk/reward and suggest a buy.
+// Educational, rules-based screen over the in-browser price history.
+// ===========================================================================
+
+const priceCache = {};  // symbol -> {dates, prices}
+
+function getPriceSeries(symbol) {
+    if (priceCache[symbol]) return priceCache[symbol];
+    const dates = [], prices = [];
+    try {
+        const stmt = db.prepare(
+            "SELECT date, adjusted_close AS price FROM prices WHERE symbol = ? ORDER BY date");
+        stmt.bind([symbol]);
+        while (stmt.step()) { const r = stmt.getAsObject(); dates.push(r.date); prices.push(r.price); }
+        stmt.free();
+    } catch (err) { console.error(`prices for ${symbol}:`, err); }
+    return priceCache[symbol] = { dates, prices };
+}
+
+// Reweight the four factors by risk appetite.
+const COMPASS_WEIGHTS = {
+    conservative: { q: 0.30, m: 0.10, t: 0.20, s: 0.40 },
+    balanced:     { q: 0.35, m: 0.25, t: 0.20, s: 0.20 },
+    aggressive:   { q: 0.25, m: 0.45, t: 0.20, s: 0.10 }
+};
+
+function runCompass() {
+    const pickDiv = document.getElementById('compass-pick');
+    const tableDiv = document.getElementById('compass-table');
+    if (!stockData || stockData.length === 0) {
+        pickDiv.innerHTML = '<div class="info">No risk metrics loaded yet — try again once the data has loaded.</div>';
+        tableDiv.innerHTML = '';
+        return;
+    }
+    const appetite = document.getElementById('compass-appetite').value;
+    const region = document.getElementById('compass-region').value;
+    const metricsMap = {};
+    stockData.forEach(s => { metricsMap[s.symbol] = s; });
+
+    // Build the candidate set with current price-based signals.
+    const rows = [];
+    allStocks.forEach(st => {
+        if (region !== 'all' && st.region !== region) return;
+        const m = metricsMap[st.symbol];
+        if (!m) return;  // no metrics => no price data yet
+        const p = getPriceSeries(st.symbol).prices;
+        if (p.length < 200) return;
+        const latest = p[p.length - 1];
+        const sma200 = pfMean(p.slice(-200));
+        const trend = sma200 ? latest / sma200 - 1 : 0;             // above/below 200-day avg
+        const mom = p.length > 63 ? latest / p[p.length - 64] - 1 : 0;  // 3-month momentum
+        const high252 = Math.max(...p.slice(-252));
+        const pullback = high252 ? latest / high252 - 1 : 0;        // distance below 52-wk high
+        rows.push({
+            symbol: st.symbol, name: st.name, sector: st.sector, region: st.region,
+            sharpe: m.sharpe_ratio || 0, vol: m.volatility || 0,
+            mom, trend, pullback
+        });
+    });
+    if (rows.length === 0) {
+        pickDiv.innerHTML = '<div class="info">No stocks with enough price history match that filter yet.</div>';
+        tableDiv.innerHTML = '';
+        return;
+    }
+
+    // Rank-score each factor in [0,1] across the candidate set (best = 1). Rank
+    // scoring is robust to outliers — one stock with a huge momentum reading
+    // can't swamp the composite the way a z-score would.
+    const rankFactor = (key, higherBetter) => {
+        const sorted = [...rows].sort((a, b) => higherBetter ? b[key] - a[key] : a[key] - b[key]);
+        const n = sorted.length;
+        sorted.forEach((r, i) => { r['r_' + key] = n > 1 ? 1 - i / (n - 1) : 1; });
+    };
+    rankFactor('sharpe', true);
+    rankFactor('mom', true);
+    rankFactor('trend', true);
+    rankFactor('vol', false);  // lower volatility is better
+
+    const w = COMPASS_WEIGHTS[appetite];
+    rows.forEach(r => {
+        r.score = w.q * r.r_sharpe + w.m * r.r_mom + w.t * r.r_trend + w.s * r.r_vol;
+        r.score100 = Math.round(r.score * 100);  // already in [0,1]
+    });
+    rows.sort((a, b) => b.score - a.score);
+
+    renderCompass(rows, appetite);
+}
+
+function compassQuality(rank, n) {
+    const pct = rank / n;
+    if (pct <= 0.25) return 'top-quartile';
+    if (pct <= 0.5) return 'above-average';
+    if (pct <= 0.75) return 'middling';
+    return 'below-average';
+}
+
+function compassRationale(r, rows) {
+    const n = rows.length;
+    const sharpeRank = [...rows].sort((a, b) => b.sharpe - a.sharpe).findIndex(x => x.symbol === r.symbol) + 1;
+    const parts = [];
+    parts.push(`its risk-adjusted returns are ${compassQuality(sharpeRank, n)} (Sharpe ${r.sharpe.toFixed(2)})`);
+    parts.push(r.mom >= 0
+        ? `it carries positive 3-month momentum (+${(r.mom * 100).toFixed(1)}%)`
+        : `it has cooled off over 3 months (${(r.mom * 100).toFixed(1)}%)`);
+    parts.push(r.trend >= 0
+        ? `and trades above its 200-day average — a steady uptrend rather than a spike`
+        : `though it currently sits below its 200-day average`);
+    let s = parts.join(', ') + '.';
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+    if (r.pullback <= -0.1) {
+        s += ` It's also ${Math.abs(r.pullback * 100).toFixed(0)}% off its 52-week high, so you'd be buying on a pullback.`;
+    }
+    return s;
+}
+
+function renderCompass(rows, appetite) {
+    const top = rows[0];
+    const fmtP = v => (v * 100).toFixed(1) + '%';
+    document.getElementById('compass-pick').innerHTML = `
+        <div class="compass-pick">
+            <p class="pick-eyebrow">The compass points to · ${appetite} appetite</p>
+            <div class="pick-symbol">${top.symbol}
+                <span style="font-family:var(--font-data);font-size:var(--step-0);color:var(--contour);">score ${top.score100}/100</span></div>
+            <div class="pick-name">${top.name} · ${top.sector} · ${top.region}</div>
+            <p class="pick-rationale">${compassRationale(top, rows)}</p>
+            <div class="pick-stats">
+                <span>Sharpe <strong>${top.sharpe.toFixed(2)}</strong></span>
+                <span>3-mo momentum <strong>${fmtP(top.mom)}</strong></span>
+                <span>vs 200-day avg <strong>${fmtP(top.trend)}</strong></span>
+                <span>Volatility <strong>${fmtP(top.vol)}</strong></span>
+                <span>Off 52-wk high <strong>${fmtP(top.pullback)}</strong></span>
+            </div>
+        </div>`;
+
+    const ranked = rows.slice(0, 12);
+    let html = '<p class="section-label">Full ranking (top 12)</p><div class="compass-table"><table><thead><tr>' +
+        '<th>#</th><th>Stock</th><th>Sector</th><th>Score</th><th>Sharpe</th>' +
+        '<th>3-mo</th><th>vs 200d</th><th>Vol</th></tr></thead><tbody>';
+    ranked.forEach((r, i) => {
+        html += `<tr class="${i === 0 ? 'rank-1' : ''}">
+            <td>${i + 1}</td>
+            <td><strong>${r.symbol}</strong> <span style="color:var(--contour);font-family:var(--font-data);font-size:var(--step--1);">${r.region}</span></td>
+            <td>${r.sector}</td>
+            <td><span class="score-bar" style="width:${Math.max(4, r.score100)}px;"></span> ${r.score100}</td>
+            <td>${r.sharpe.toFixed(2)}</td>
+            <td>${fmtP(r.mom)}</td>
+            <td>${fmtP(r.trend)}</td>
+            <td>${fmtP(r.vol)}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    document.getElementById('compass-table').innerHTML = html;
+}
+
 // Tab switching
 function showTab(tabName) {
     // Hide all tabs
@@ -1089,6 +1244,12 @@ function showTab(tabName) {
         activeTab.querySelectorAll('.js-plotly-plot').forEach(plot => {
             try { Plotly.Plots.resize(plot); } catch (e) { /* not yet drawn */ }
         });
+    }
+
+    // Run the Compass automatically the first time its tab is opened.
+    if (tabName === 'compass' && db && stockData.length &&
+        !document.getElementById('compass-pick').innerHTML.trim()) {
+        runCompass();
     }
 
     // Add active class to clicked button
