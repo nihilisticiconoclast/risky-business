@@ -257,6 +257,67 @@
                         <div id="builder-allocation-chart"></div>
                     </div>
                 </div>
+
+                <div id="mc-section" style="display: none;">
+                    <h2 style="margin-top: 2.5rem;">Monte Carlo Simulation</h2>
+                    <p class="page-intro">
+                        Project the portfolio forward by simulating thousands of possible
+                        futures and looking at the <em>range</em> of where it could land.
+                        <strong>Historical bootstrap</strong> resamples the portfolio's own
+                        past daily returns (keeping its real fat tails and skew);
+                        <strong>GBM</strong> assumes normally-distributed daily moves
+                        calibrated to its history. This is a distribution of possibilities,
+                        not a forecast — past behaviour doesn't guarantee the future.
+                    </p>
+                    <div class="builder-controls">
+                        <div class="builder-field">
+                            <label for="mc-method">Method</label>
+                            <select id="mc-method">
+                                <option value="bootstrap">Historical bootstrap</option>
+                                <option value="gbm">Geometric Brownian Motion</option>
+                            </select>
+                        </div>
+                        <div class="builder-field">
+                            <label for="mc-horizon">Horizon</label>
+                            <select id="mc-horizon">
+                                <option value="21">1 month</option>
+                                <option value="63">3 months</option>
+                                <option value="126">6 months</option>
+                                <option value="252" selected>1 year</option>
+                                <option value="504">2 years</option>
+                            </select>
+                        </div>
+                        <div class="builder-field">
+                            <label for="mc-paths">Paths</label>
+                            <select id="mc-paths">
+                                <option value="500">500</option>
+                                <option value="1000" selected>1,000</option>
+                                <option value="5000">5,000</option>
+                            </select>
+                        </div>
+                        <div class="builder-field">
+                            <label for="mc-start">Start ($)</label>
+                            <input id="mc-start" type="number" min="100" step="100" value="10000">
+                        </div>
+                        <button class="btn btn--route" onclick="runMonteCarlo()">Run simulation</button>
+                    </div>
+                    <div id="mc-results"></div>
+                    <div class="viz-container">
+                        <div class="viz-box">
+                            <h3>Projected Value — percentile fan</h3>
+                            <p class="chart-note">The median outcome over time, with the
+                                25th–75th and 5th–95th percentile bands. Wider bands = more
+                                uncertainty.</p>
+                            <div id="mc-fan-chart"></div>
+                        </div>
+                        <div class="viz-box">
+                            <h3>Distribution of Final Values</h3>
+                            <p class="chart-note">Where the simulated end values landed. The
+                                left tail is your downside risk.</p>
+                            <div id="mc-hist-chart"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="query" class="tab-content" style="display: none;">
