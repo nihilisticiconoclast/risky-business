@@ -55,55 +55,62 @@ TIINGO_TOKEN = os.environ.get('TIINGO_API_KEY', '').strip()
 DB_PATH = 'data/processed/finance_data.db'
 
 # Single source of truth for which stocks the dashboard tracks. To add a stock,
-# add one (symbol, name, sector, industry) row here -- TICKERS is derived from
-# it, so the fetch list and the stocks table can never drift apart.
+# add one (symbol, name, sector, industry, region) row here -- TICKERS is
+# derived from it, so the fetch list and the stocks table can never drift apart.
+#
+# FTSE 100 names are tracked via their US-listed ADRs (e.g. SHEL, AZN, HSBC) so
+# they come through Tiingo's free US end-of-day feed and work from CI. ADR
+# prices are in USD, like the rest of the universe.
 STOCK_INFO = [
-    ('AAPL', 'Apple Inc.', 'Technology', 'Consumer Electronics'),
-    ('MSFT', 'Microsoft Corporation', 'Technology', 'Software'),
-    ('GOOGL', 'Alphabet Inc.', 'Technology', 'Internet'),
-    ('AMZN', 'Amazon.com Inc.', 'Consumer Discretionary', 'E-commerce'),
-    ('META', 'Meta Platforms Inc.', 'Technology', 'Social Media'),
-    ('TSLA', 'Tesla Inc.', 'Consumer Discretionary', 'Automotive'),
-    ('JPM', 'JPMorgan Chase & Co.', 'Financial Services', 'Banks'),
-    ('V', 'Visa Inc.', 'Financial Services', 'Payment Processing'),
-    ('PG', 'Procter & Gamble Co.', 'Consumer Staples', 'Household Products'),
-    ('DIS', 'The Walt Disney Company', 'Communication Services', 'Entertainment'),
-    # --- Information Technology / Semiconductors ---
-    ('NVDA', 'NVIDIA Corporation', 'Technology', 'Semiconductors'),
-    ('AMD', 'Advanced Micro Devices Inc.', 'Technology', 'Semiconductors'),
-    ('AVGO', 'Broadcom Inc.', 'Technology', 'Semiconductors'),
-    ('INTC', 'Intel Corporation', 'Technology', 'Semiconductors'),
-    ('ORCL', 'Oracle Corporation', 'Technology', 'Software'),
-    ('CRM', 'Salesforce Inc.', 'Technology', 'Software'),
-    # --- Communication Services ---
-    ('NFLX', 'Netflix Inc.', 'Communication Services', 'Streaming'),
-    # --- Health Care ---
-    ('JNJ', 'Johnson & Johnson', 'Health Care', 'Pharmaceuticals'),
-    ('UNH', 'UnitedHealth Group Inc.', 'Health Care', 'Managed Care'),
-    ('PFE', 'Pfizer Inc.', 'Health Care', 'Pharmaceuticals'),
-    ('LLY', 'Eli Lilly and Company', 'Health Care', 'Pharmaceuticals'),
-    # --- Energy ---
-    ('XOM', 'Exxon Mobil Corporation', 'Energy', 'Oil & Gas'),
-    ('CVX', 'Chevron Corporation', 'Energy', 'Oil & Gas'),
-    # --- Consumer Staples ---
-    ('KO', 'The Coca-Cola Company', 'Consumer Staples', 'Beverages'),
-    ('PEP', 'PepsiCo Inc.', 'Consumer Staples', 'Beverages'),
-    ('WMT', 'Walmart Inc.', 'Consumer Staples', 'Retail'),
-    # --- Consumer Discretionary ---
-    ('HD', 'The Home Depot Inc.', 'Consumer Discretionary', 'Home Improvement Retail'),
-    ('NKE', 'Nike Inc.', 'Consumer Discretionary', 'Apparel'),
-    # --- Financials ---
-    ('BAC', 'Bank of America Corporation', 'Financial Services', 'Banks'),
-    ('MA', 'Mastercard Incorporated', 'Financial Services', 'Payment Processing'),
-    # --- Industrials ---
-    ('CAT', 'Caterpillar Inc.', 'Industrials', 'Machinery'),
-    ('BA', 'The Boeing Company', 'Industrials', 'Aerospace & Defense'),
-    # --- Materials ---
-    ('LIN', 'Linde plc', 'Materials', 'Industrial Gases'),
-    # --- Utilities ---
-    ('NEE', 'NextEra Energy Inc.', 'Utilities', 'Electric Utilities'),
-    # --- Real Estate ---
-    ('AMT', 'American Tower Corporation', 'Real Estate', 'REITs'),
+    # === US ===
+    ('AAPL', 'Apple Inc.', 'Technology', 'Consumer Electronics', 'US'),
+    ('MSFT', 'Microsoft Corporation', 'Technology', 'Software', 'US'),
+    ('GOOGL', 'Alphabet Inc.', 'Technology', 'Internet', 'US'),
+    ('AMZN', 'Amazon.com Inc.', 'Consumer Discretionary', 'E-commerce', 'US'),
+    ('META', 'Meta Platforms Inc.', 'Technology', 'Social Media', 'US'),
+    ('TSLA', 'Tesla Inc.', 'Consumer Discretionary', 'Automotive', 'US'),
+    ('JPM', 'JPMorgan Chase & Co.', 'Financial Services', 'Banks', 'US'),
+    ('V', 'Visa Inc.', 'Financial Services', 'Payment Processing', 'US'),
+    ('PG', 'Procter & Gamble Co.', 'Consumer Staples', 'Household Products', 'US'),
+    ('DIS', 'The Walt Disney Company', 'Communication Services', 'Entertainment', 'US'),
+    ('NVDA', 'NVIDIA Corporation', 'Technology', 'Semiconductors', 'US'),
+    ('AMD', 'Advanced Micro Devices Inc.', 'Technology', 'Semiconductors', 'US'),
+    ('AVGO', 'Broadcom Inc.', 'Technology', 'Semiconductors', 'US'),
+    ('INTC', 'Intel Corporation', 'Technology', 'Semiconductors', 'US'),
+    ('ORCL', 'Oracle Corporation', 'Technology', 'Software', 'US'),
+    ('CRM', 'Salesforce Inc.', 'Technology', 'Software', 'US'),
+    ('NFLX', 'Netflix Inc.', 'Communication Services', 'Streaming', 'US'),
+    ('JNJ', 'Johnson & Johnson', 'Health Care', 'Pharmaceuticals', 'US'),
+    ('UNH', 'UnitedHealth Group Inc.', 'Health Care', 'Managed Care', 'US'),
+    ('PFE', 'Pfizer Inc.', 'Health Care', 'Pharmaceuticals', 'US'),
+    ('LLY', 'Eli Lilly and Company', 'Health Care', 'Pharmaceuticals', 'US'),
+    ('XOM', 'Exxon Mobil Corporation', 'Energy', 'Oil & Gas', 'US'),
+    ('CVX', 'Chevron Corporation', 'Energy', 'Oil & Gas', 'US'),
+    ('KO', 'The Coca-Cola Company', 'Consumer Staples', 'Beverages', 'US'),
+    ('PEP', 'PepsiCo Inc.', 'Consumer Staples', 'Beverages', 'US'),
+    ('WMT', 'Walmart Inc.', 'Consumer Staples', 'Retail', 'US'),
+    ('HD', 'The Home Depot Inc.', 'Consumer Discretionary', 'Home Improvement Retail', 'US'),
+    ('NKE', 'Nike Inc.', 'Consumer Discretionary', 'Apparel', 'US'),
+    ('BAC', 'Bank of America Corporation', 'Financial Services', 'Banks', 'US'),
+    ('MA', 'Mastercard Incorporated', 'Financial Services', 'Payment Processing', 'US'),
+    ('CAT', 'Caterpillar Inc.', 'Industrials', 'Machinery', 'US'),
+    ('BA', 'The Boeing Company', 'Industrials', 'Aerospace & Defense', 'US'),
+    ('LIN', 'Linde plc', 'Materials', 'Industrial Gases', 'US'),
+    ('NEE', 'NextEra Energy Inc.', 'Utilities', 'Electric Utilities', 'US'),
+    ('AMT', 'American Tower Corporation', 'Real Estate', 'REITs', 'US'),
+    # === UK (FTSE 100, via US-listed ADRs) ===
+    ('SHEL', 'Shell plc', 'Energy', 'Oil & Gas', 'UK'),
+    ('BP', 'BP p.l.c.', 'Energy', 'Oil & Gas', 'UK'),
+    ('AZN', 'AstraZeneca PLC', 'Health Care', 'Pharmaceuticals', 'UK'),
+    ('GSK', 'GSK plc', 'Health Care', 'Pharmaceuticals', 'UK'),
+    ('HSBC', 'HSBC Holdings plc', 'Financial Services', 'Banks', 'UK'),
+    ('BCS', 'Barclays PLC', 'Financial Services', 'Banks', 'UK'),
+    ('UL', 'Unilever PLC', 'Consumer Staples', 'Household Products', 'UK'),
+    ('DEO', 'Diageo plc', 'Consumer Staples', 'Beverages', 'UK'),
+    ('BTI', 'British American Tobacco p.l.c.', 'Consumer Staples', 'Tobacco', 'UK'),
+    ('RIO', 'Rio Tinto Group', 'Materials', 'Metals & Mining', 'UK'),
+    ('NGG', 'National Grid plc', 'Utilities', 'Electric Utilities', 'UK'),
+    ('VOD', 'Vodafone Group Plc', 'Communication Services', 'Telecom', 'UK'),
 ]
 
 # Derived: the symbols to fetch, in STOCK_INFO order.
@@ -327,28 +334,39 @@ def variance(xs):
 # Database build --------------------------------------------------------------
 def create_schema(cursor):
     cursor.execute("PRAGMA foreign_keys = ON")
+    # Rebuild from scratch each run. The script fully repopulates every table
+    # from freshly fetched data, and dropping first means schema changes (e.g.
+    # the stocks.region column) apply cleanly to an already-committed database.
+    # Drop children before parents to satisfy foreign keys.
     cursor.executescript('''
-    CREATE TABLE IF NOT EXISTS stocks (
-        symbol TEXT PRIMARY KEY, name TEXT, sector TEXT, industry TEXT);
-    CREATE TABLE IF NOT EXISTS prices (
+    DROP TABLE IF EXISTS prices;
+    DROP TABLE IF EXISTS portfolio_holdings;
+    DROP TABLE IF EXISTS stock_risk_metrics;
+    DROP TABLE IF EXISTS portfolio_risk_metrics;
+    DROP TABLE IF EXISTS portfolios;
+    DROP TABLE IF EXISTS stocks;
+    CREATE TABLE stocks (
+        symbol TEXT PRIMARY KEY, name TEXT, sector TEXT, industry TEXT,
+        region TEXT);
+    CREATE TABLE prices (
         symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL,
         volume INTEGER, adjusted_close REAL, dividends REAL DEFAULT 0,
         stock_splits REAL DEFAULT 1,
         FOREIGN KEY (symbol) REFERENCES stocks(symbol));
-    CREATE TABLE IF NOT EXISTS portfolios (
+    CREATE TABLE portfolios (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
         description TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE IF NOT EXISTS portfolio_holdings (
+    CREATE TABLE portfolio_holdings (
         id INTEGER PRIMARY KEY AUTOINCREMENT, portfolio_id INTEGER, symbol TEXT,
         quantity REAL, purchase_date TEXT, purchase_price REAL,
         FOREIGN KEY (portfolio_id) REFERENCES portfolios(id),
         FOREIGN KEY (symbol) REFERENCES stocks(symbol));
-    CREATE TABLE IF NOT EXISTS stock_risk_metrics (
+    CREATE TABLE stock_risk_metrics (
         symbol TEXT PRIMARY KEY, mean_return REAL, volatility REAL,
         sharpe_ratio REAL, max_drawdown REAL, var_95 REAL, beta REAL,
         observations INTEGER, calculated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (symbol) REFERENCES stocks(symbol));
-    CREATE TABLE IF NOT EXISTS portfolio_risk_metrics (
+    CREATE TABLE portfolio_risk_metrics (
         portfolio_id INTEGER, mean_return REAL, volatility REAL,
         sharpe_ratio REAL, max_drawdown REAL,
         calculated_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -388,14 +406,11 @@ def build_database(price_data):
     os.makedirs('data/processed', exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    create_schema(cur)
+    create_schema(cur)  # drops + recreates every table, so it starts empty
 
-    # Reset content so re-runs are idempotent.
-    for t in ('prices', 'stock_risk_metrics', 'portfolio_risk_metrics',
-              'portfolio_holdings'):
-        cur.execute(f'DELETE FROM {t}')
-
-    cur.executemany('INSERT OR IGNORE INTO stocks VALUES (?,?,?,?)', STOCK_INFO)
+    cur.executemany(
+        'INSERT INTO stocks (symbol, name, sector, industry, region) '
+        'VALUES (?,?,?,?,?)', STOCK_INFO)
 
     for symbol, rows in price_data.items():
         cur.executemany(

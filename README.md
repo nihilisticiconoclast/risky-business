@@ -170,11 +170,17 @@ risky-business/
 ## Customization
 
 ### Add New Stocks
-Add one `(symbol, name, sector, industry)` row to `STOCK_INFO` in
+Add one `(symbol, name, sector, industry, region)` row to `STOCK_INFO` in
 `python/fetch_real_data.py` — the fetch list (`TICKERS`) is derived from it, so
-that single edit is enough. The dashboard ships with 35 stocks spanning all 11
-S&P sectors. Re-run `python python/fetch_real_data.py` (or the GitHub Action) to
-pull the new symbol's history.
+that single edit is enough. The dashboard ships with 47 stocks (35 US plus 12
+FTSE 100 names) spanning all 11 S&P sectors, and the charts and stock picker are
+grouped by sector. Re-run `python python/fetch_real_data.py` (or the GitHub
+Action) to pull the new symbol's history.
+
+> **FTSE 100 / international stocks:** Tiingo's free end-of-day feed is
+> US-listed, so the FTSE 100 names are tracked via their US ADRs (e.g.
+> `SHEL`, `AZN`, `HSBC`) — priced in USD. To add London-listed tickers
+> directly (e.g. `SHEL.L`) you'd need a provider that covers the LSE.
 
 ### Modify Portfolio
 Edit the sample portfolio in `python/build_database.py` or create new entries in the SQLite database.
