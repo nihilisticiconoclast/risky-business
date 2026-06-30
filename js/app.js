@@ -636,6 +636,14 @@ function clearQuery() {
     document.getElementById('query-results').innerHTML = '';
 }
 
+// Populate the editor from an example chip and run it immediately
+function setQuery(query) {
+    const textarea = document.getElementById('sql-query');
+    textarea.value = query;
+    textarea.focus();
+    runQuery();
+}
+
 // Tab switching
 function showTab(tabName) {
     // Hide all tabs

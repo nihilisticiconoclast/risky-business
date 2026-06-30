@@ -391,6 +391,117 @@
     font-size: var(--step-0);
 }
 
+/* Explanatory copy -- intros, callouts, chart notes, glossaries */
+.page-intro {
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    color: var(--ink);
+    max-width: var(--measure);
+    margin: 0 0 1.5rem;
+}
+
+.callout {
+    border-left: 3px solid var(--route);
+    background: color-mix(in srgb, var(--route) 7%, var(--paper));
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius);
+    margin: 0 0 1.5rem;
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    color: var(--ink);
+    max-width: var(--measure);
+}
+
+.callout strong {
+    color: var(--route);
+}
+
+.page-intro code,
+.callout code,
+.glossary code,
+.example-queries code {
+    font-family: var(--font-data);
+    font-size: .9em;
+    background: color-mix(in srgb, var(--contour) 12%, var(--paper));
+    padding: .05em .35em;
+    border-radius: var(--radius);
+}
+
+.chart-note {
+    font-family: var(--font-body);
+    font-size: var(--step--1);
+    line-height: 1.55;
+    color: var(--contour);
+    margin: -.25rem 0 1.25rem;
+}
+
+.glossary {
+    margin: 1.5rem 0 0;
+    max-width: var(--measure);
+}
+
+.glossary > div {
+    padding: .85rem 0;
+    border-top: var(--rule);
+}
+
+.glossary > div:last-child {
+    border-bottom: var(--rule);
+}
+
+.glossary dt {
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--ink);
+    font-size: var(--step-0);
+    margin-bottom: .2rem;
+}
+
+.glossary dd {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: var(--step--1);
+    line-height: 1.55;
+    color: var(--contour);
+}
+
+.section-label {
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--contour);
+    margin: 0 0 .75rem;
+}
+
+/* Clickable example SQL queries */
+.example-queries {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin: .5rem 0 1.5rem;
+}
+
+.example-query {
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    text-align: left;
+    padding: .5rem .75rem;
+    border: 1px solid var(--index);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--index) 5%, transparent);
+    color: var(--ink);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.example-query:hover {
+    border-color: var(--route);
+    background: color-mix(in srgb, var(--route) 8%, transparent);
+}
+
 /* Responsive design */
 @media (max-width: 1024px) {
     .viz-container {
