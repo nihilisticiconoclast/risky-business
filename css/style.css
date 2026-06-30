@@ -502,6 +502,110 @@
     background: color-mix(in srgb, var(--route) 8%, transparent);
 }
 
+/* Portfolio builder */
+.builder-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .75rem;
+    margin: 1.5rem 0;
+    padding: 1.25rem;
+    background: color-mix(in srgb, var(--index) 5%, transparent);
+    border: 1px solid var(--index);
+    border-radius: var(--radius);
+}
+
+.builder-field {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.builder-field label {
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--contour);
+}
+
+.builder-field select,
+.builder-field input {
+    padding: .6rem .75rem;
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+    border: 1px solid var(--index);
+    border-radius: var(--radius);
+    background: var(--paper);
+    color: var(--ink);
+}
+
+.builder-field select { min-width: 280px; }
+.builder-field input { width: 110px; }
+
+.builder-field select:focus,
+.builder-field input:focus {
+    outline: none;
+    border-color: var(--route);
+}
+
+.holdings-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+}
+
+.holdings-table th,
+.holdings-table td {
+    padding: .6rem .75rem;
+    text-align: left;
+    border-bottom: var(--rule);
+}
+
+.holdings-table th {
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--contour);
+}
+
+.holdings-table tfoot td {
+    font-weight: 600;
+    border-bottom: none;
+    border-top: 2px solid var(--index);
+}
+
+.holdings-table .weight-input {
+    width: 90px;
+    padding: .4rem .5rem;
+    font-family: var(--font-data);
+    border: 1px solid var(--index);
+    border-radius: var(--radius);
+    background: var(--paper);
+    color: var(--ink);
+}
+
+.holdings-table .weight-input:focus {
+    outline: none;
+    border-color: var(--route);
+}
+
+.holdings-table .remove-btn {
+    padding: .25rem .6rem;
+    font-size: var(--step-0);
+    line-height: 1;
+}
+
+.holdings-empty {
+    font-family: var(--font-body);
+    color: var(--contour);
+    font-size: var(--step-0);
+    padding: 1rem 0;
+}
+
 /* Responsive design */
 @media (max-width: 1024px) {
     .viz-container {

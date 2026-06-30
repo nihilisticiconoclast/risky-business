@@ -32,6 +32,7 @@
                 <button class="tab-button active" onclick="showTab('overview')">Overview</button>
                 <button class="tab-button" onclick="showTab('stocks')">Stock Analysis</button>
                 <button class="tab-button" onclick="showTab('portfolio')">Portfolio</button>
+                <button class="tab-button" onclick="showTab('builder')">Build Portfolio</button>
                 <button class="tab-button" onclick="showTab('query')">SQL Query</button>
             </nav>
         </header>
@@ -203,6 +204,57 @@
                             The longer the bar, the deeper the worst-case fall that stock has
                             put investors through.</p>
                         <div id="drawdown-chart"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="builder" class="tab-content" style="display: none;">
+                <h2>Build Your Own Portfolio</h2>
+
+                <p class="page-intro">
+                    This is the real thing — <em>your</em> portfolio, not the sample.
+                    Add any of the 47 stocks, set how much weight each one carries, and
+                    the risk metrics and charts are recomputed <strong>live in your
+                    browser</strong> from ~10 years of daily prices. Nothing is saved or
+                    sent anywhere; weights are automatically normalised to 100%, so you can
+                    enter them as percentages, shares, or any relative numbers you like.
+                </p>
+
+                <div class="builder-controls">
+                    <div class="builder-field">
+                        <label for="builder-stock">Stock</label>
+                        <select id="builder-stock"></select>
+                    </div>
+                    <div class="builder-field">
+                        <label for="builder-weight">Weight</label>
+                        <input id="builder-weight" type="number" min="0" step="1" value="10">
+                    </div>
+                    <button class="btn btn--route" onclick="addHolding()">Add to portfolio</button>
+                    <button class="btn" onclick="equalWeightHoldings()">Equal-weight</button>
+                    <button class="btn" onclick="loadSamplePortfolio()">Load sample</button>
+                    <button class="btn" onclick="clearHoldings()">Clear</button>
+                </div>
+
+                <div id="builder-holdings"></div>
+
+                <button class="btn btn--route" id="builder-calc" onclick="calculatePortfolio()"
+                        style="margin: 1rem 0;">Calculate risk</button>
+
+                <div id="builder-results"></div>
+
+                <div class="viz-container" id="builder-charts" style="display: none;">
+                    <div class="viz-box">
+                        <h3>Growth of $10,000</h3>
+                        <p class="chart-note">How $10,000 invested at the start would have
+                            tracked, versus an equal-weight basket of all 47 stocks as a
+                            benchmark.</p>
+                        <div id="builder-growth-chart"></div>
+                    </div>
+                    <div class="viz-box">
+                        <h3>Sector Allocation</h3>
+                        <p class="chart-note">Your normalised weights grouped by sector — a
+                            quick read on how diversified (or concentrated) the mix is.</p>
+                        <div id="builder-allocation-chart"></div>
                     </div>
                 </div>
             </div>

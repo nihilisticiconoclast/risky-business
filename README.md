@@ -7,6 +7,9 @@ An interactive financial dashboard for analyzing portfolio risk metrics using SQ
 - **Volatility Analysis**: Annualized volatility for individual stocks and portfolios
 - **Risk Metrics**: Sharpe ratio, Value at Risk (VaR), maximum drawdown, Beta
 - **Portfolio Analysis**: Aggregate risk metrics for custom portfolios
+- **Build Your Own Portfolio**: Pick stocks and weights in the browser and
+  recompute risk metrics, a growth chart, and sector allocation live — no
+  server, no data leaves your machine
 - **SQL Query Interface**: Run custom queries on financial data
 - **Interactive Visualizations**: Plotly.js charts with zoom, pan, and hover details
 

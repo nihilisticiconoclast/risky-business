@@ -2,6 +2,8 @@
 let db = null;
 let stockData = [];
 let portfolioData = [];
+let allStocks = [];          // [{symbol, name, sector, region}] for all tracked stocks
+const stockInfoMap = {};     // symbol -> {name, sector, region}
 
 // Initialize sql.js
 // Using the newer sql-wasm.js which exposes initSqlJs as a global
@@ -88,47 +90,51 @@ function loadStockList() {
         
         const stmt = db.prepare(
             "SELECT symbol, name, sector, region FROM stocks ORDER BY sector, symbol");
-        const stocks = [];
+        allStocks = [];
         while (stmt.step()) {
             // getAsObject() returns a {column: value} object; get() returns a
             // positional array, which is why named access used to be undefined.
-            stocks.push(stmt.getAsObject());
+            const row = stmt.getAsObject();
+            allStocks.push(row);
+            stockInfoMap[row.symbol] = row;
         }
         stmt.free();
 
-        const select = document.getElementById('stock-select');
-        if (!select) {
-            console.error("stock-select element not found");
-            return;
-        }
+        // Populate the Stock Analysis picker and the Build Portfolio picker,
+        // both grouped into <optgroup>s by sector.
+        populateStockSelect('stock-select', '-- Select a stock --');
+        populateStockSelect('builder-stock', '-- Select a stock --');
+        renderHoldings();  // show the builder's empty state
 
-        select.innerHTML = '<option value="">-- Select a stock --</option>';
-
-        // Group the options by sector using <optgroup> for easier scanning.
-        const bySector = {};
-        stocks.forEach(stock => {
-            const sector = stock.sector || 'Other';
-            (bySector[sector] = bySector[sector] || []).push(stock);
-        });
-        Object.keys(bySector).sort().forEach(sector => {
-            const group = document.createElement('optgroup');
-            group.label = sector;
-            bySector[sector].forEach(stock => {
-                const option = document.createElement('option');
-                const symbol = stock.symbol || 'Unknown';
-                const name = stock.name || 'Unknown';
-                const region = stock.region ? ` · ${stock.region}` : '';
-                option.value = symbol;
-                option.textContent = `${symbol} — ${name}${region}`;
-                group.appendChild(option);
-            });
-            select.appendChild(group);
-        });
-
-        console.log(`Loaded ${stocks.length} stocks`);
+        console.log(`Loaded ${allStocks.length} stocks`);
     } catch (err) {
         console.error("Error loading stock list:", err);
     }
+}
+
+// Fill a <select> with all stocks, grouped into <optgroup>s by sector.
+function populateStockSelect(selectId, placeholder) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+
+    const bySector = {};
+    allStocks.forEach(stock => {
+        const sector = stock.sector || 'Other';
+        (bySector[sector] = bySector[sector] || []).push(stock);
+    });
+    Object.keys(bySector).sort().forEach(sector => {
+        const group = document.createElement('optgroup');
+        group.label = sector;
+        bySector[sector].forEach(stock => {
+            const option = document.createElement('option');
+            const region = stock.region ? ` · ${stock.region}` : '';
+            option.value = stock.symbol;
+            option.textContent = `${stock.symbol} — ${stock.name || ''}${region}`;
+            group.appendChild(option);
+        });
+        select.appendChild(group);
+    });
 }
 
 // Load all stock metrics for portfolio tab
@@ -655,6 +661,289 @@ function setQuery(query) {
     textarea.value = query;
     textarea.focus();
     runQuery();
+}
+
+// ===========================================================================
+// Build Your Own Portfolio — everything below runs client-side from the
+// in-browser SQLite price history.
+// ===========================================================================
+
+let myHoldings = [];            // [{symbol, weight}]
+const returnsCache = {};        // symbol -> Map(date -> daily return)
+let marketReturnsCache = null;  // Map(date -> equal-weight market return)
+
+// --- small stats helpers (mirror python/fetch_real_data.py) ---
+function pfMean(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
+function pfPstdev(a) {
+    if (a.length < 1) return 0;
+    const m = pfMean(a);
+    return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length);
+}
+function pfPercentile(a, p) {
+    if (!a.length) return 0;
+    const s = [...a].sort((x, y) => x - y);
+    const r = (p / 100) * (s.length - 1);
+    const lo = Math.floor(r), hi = Math.ceil(r);
+    return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (r - lo);
+}
+function pfMaxDrawdown(rets) {
+    let c = 1, peak = 1, worst = 0;
+    rets.forEach(r => { c *= (1 + r); peak = Math.max(peak, c); worst = Math.min(worst, (c - peak) / peak); });
+    return worst;
+}
+function pfCovariance(x, y) {
+    const n = Math.min(x.length, y.length);
+    if (n < 2) return 0;
+    const mx = pfMean(x), my = pfMean(y);
+    let s = 0;
+    for (let i = 0; i < n; i++) s += (x[i] - mx) * (y[i] - my);
+    return s / n;
+}
+
+// Daily returns for a symbol as a Map(date -> return). Cached.
+function getReturnSeries(symbol) {
+    if (returnsCache[symbol]) return returnsCache[symbol];
+    const map = new Map();
+    try {
+        const stmt = db.prepare(
+            "SELECT date, adjusted_close AS price FROM prices WHERE symbol = ? ORDER BY date");
+        stmt.bind([symbol]);
+        const dates = [], prices = [];
+        while (stmt.step()) { const r = stmt.getAsObject(); dates.push(r.date); prices.push(r.price); }
+        stmt.free();
+        for (let i = 1; i < prices.length; i++) {
+            if (prices[i - 1]) map.set(dates[i], (prices[i] - prices[i - 1]) / prices[i - 1]);
+        }
+    } catch (err) {
+        console.error(`Could not load prices for ${symbol}:`, err);
+    }
+    returnsCache[symbol] = map;
+    return map;
+}
+
+// Equal-weighted market return per date, across every stock with price data.
+function getMarketReturns() {
+    if (marketReturnsCache) return marketReturnsCache;
+    const sum = new Map(), count = new Map();
+    allStocks.forEach(s => {
+        getReturnSeries(s.symbol).forEach((r, d) => {
+            sum.set(d, (sum.get(d) || 0) + r);
+            count.set(d, (count.get(d) || 0) + 1);
+        });
+    });
+    marketReturnsCache = new Map();
+    sum.forEach((v, d) => marketReturnsCache.set(d, v / count.get(d)));
+    return marketReturnsCache;
+}
+
+// Render the editable holdings table.
+function renderHoldings() {
+    const div = document.getElementById('builder-holdings');
+    if (!div) return;
+    if (myHoldings.length === 0) {
+        div.innerHTML = '<p class="holdings-empty">No stocks yet — add some above, or ' +
+            'try <strong>Load sample</strong>.</p>';
+        return;
+    }
+    const total = myHoldings.reduce((a, h) => a + (h.weight || 0), 0);
+    let html = '<table class="holdings-table"><thead><tr>' +
+        '<th>Symbol</th><th>Name</th><th>Sector</th><th>Weight</th>' +
+        '<th>Normalised</th><th></th></tr></thead><tbody>';
+    myHoldings.forEach((h, i) => {
+        const info = stockInfoMap[h.symbol] || {};
+        const pct = total > 0 ? (h.weight / total * 100) : 0;
+        html += `<tr>
+            <td><strong>${h.symbol}</strong></td>
+            <td>${info.name || ''}</td>
+            <td>${info.sector || ''}</td>
+            <td><input type="number" min="0" step="1" value="${h.weight}" class="weight-input"
+                       onchange="updateHoldingWeight(${i}, this.value)"></td>
+            <td>${pct.toFixed(1)}%</td>
+            <td><button class="btn remove-btn" onclick="removeHolding(${i})" title="Remove">✕</button></td>
+        </tr>`;
+    });
+    html += `</tbody><tfoot><tr><td colspan="3">${myHoldings.length} holding(s)</td>` +
+        `<td>${total.toFixed(0)}</td><td>100%</td><td></td></tr></tfoot></table>`;
+    div.innerHTML = html;
+}
+
+function addHolding() {
+    const sel = document.getElementById('builder-stock');
+    const weightInput = document.getElementById('builder-weight');
+    const symbol = sel.value;
+    if (!symbol) return;
+    const weight = Math.max(0, parseFloat(weightInput.value) || 0);
+    const existing = myHoldings.find(h => h.symbol === symbol);
+    if (existing) {
+        existing.weight = weight;  // re-adding updates the weight
+    } else {
+        myHoldings.push({ symbol, weight });
+    }
+    sel.value = '';
+    renderHoldings();
+}
+
+function updateHoldingWeight(index, value) {
+    if (myHoldings[index]) {
+        myHoldings[index].weight = Math.max(0, parseFloat(value) || 0);
+        renderHoldings();
+    }
+}
+
+function removeHolding(index) {
+    myHoldings.splice(index, 1);
+    renderHoldings();
+}
+
+function clearHoldings() {
+    myHoldings = [];
+    renderHoldings();
+    document.getElementById('builder-results').innerHTML = '';
+    document.getElementById('builder-charts').style.display = 'none';
+}
+
+function equalWeightHoldings() {
+    myHoldings.forEach(h => { h.weight = 100 / Math.max(1, myHoldings.length); });
+    renderHoldings();
+}
+
+// Load the built-in sample portfolio so users have a starting point.
+function loadSamplePortfolio() {
+    myHoldings = [
+        { symbol: 'AAPL', weight: 32 },
+        { symbol: 'MSFT', weight: 53 },
+        { symbol: 'GOOGL', weight: 11 },
+        { symbol: 'AMZN', weight: 4 }
+    ].filter(h => stockInfoMap[h.symbol]);  // only those present in the DB
+    renderHoldings();
+}
+
+// Compute and display risk for the current holdings.
+function calculatePortfolio() {
+    const results = document.getElementById('builder-results');
+    const charts = document.getElementById('builder-charts');
+
+    const active = myHoldings.filter(h => h.weight > 0);
+    if (active.length === 0) {
+        results.innerHTML = '<div class="info">Add at least one stock with a weight above zero.</div>';
+        charts.style.display = 'none';
+        return;
+    }
+
+    // Drop any holdings that have no price history (e.g. not yet fetched).
+    const withData = [], missing = [];
+    active.forEach(h => {
+        (getReturnSeries(h.symbol).size > 0 ? withData : missing).push(h.symbol);
+    });
+    const usable = active.filter(h => withData.includes(h.symbol));
+    if (usable.length === 0) {
+        results.innerHTML = '<div class="error">None of the selected stocks have price ' +
+            'history in the database yet. Try others, or wait for the next data refresh.</div>';
+        charts.style.display = 'none';
+        return;
+    }
+
+    // Normalise weights and intersect the dates the holdings share.
+    const totalW = usable.reduce((a, h) => a + h.weight, 0);
+    const norm = usable.map(h => ({ symbol: h.symbol, w: h.weight / totalW, m: getReturnSeries(h.symbol) }));
+    let common = null;
+    norm.forEach(h => {
+        const ds = new Set(h.m.keys());
+        common = common === null ? ds : new Set([...common].filter(d => ds.has(d)));
+    });
+    const dates = [...common].sort();
+    if (dates.length < 30) {
+        results.innerHTML = '<div class="error">Not enough overlapping price history between ' +
+            'these stocks to compute meaningful risk.</div>';
+        charts.style.display = 'none';
+        return;
+    }
+
+    const rets = dates.map(d => norm.reduce((a, h) => a + h.w * h.m.get(d), 0));
+
+    // Metrics (same definitions as the per-stock metrics).
+    const std = pfPstdev(rets);
+    const annReturn = pfMean(rets) * 252 * 100;
+    const volatility = std * Math.sqrt(252) * 100;
+    const sharpe = std ? pfMean(rets) / std * Math.sqrt(252) : null;
+    const maxDD = pfMaxDrawdown(rets) * 100;
+    const var95 = pfPercentile(rets, 5) * 100;
+
+    // Beta vs the equal-weight market over the same dates.
+    const market = getMarketReturns();
+    const mktVals = dates.map(d => market.get(d)).filter(v => v !== undefined);
+    const mktVar = pfPstdev(mktVals) ** 2;
+    const beta = mktVar ? pfCovariance(rets, mktVals) / mktVar : null;
+
+    const fmt = (v, d = 2) => (v === null || isNaN(v)) ? 'N/A' : v.toFixed(d);
+    results.innerHTML = `
+        <div class="metrics-grid">
+            <div class="metric-card"><h3>Annualized Return</h3><p>${fmt(annReturn)}%</p><span class="label">Reward</span></div>
+            <div class="metric-card"><h3>Annualized Volatility</h3><p>${fmt(volatility)}%</p><span class="label">Risk</span></div>
+            <div class="metric-card"><h3>Sharpe Ratio</h3><p>${fmt(sharpe)}</p><span class="label">Reward per Risk</span></div>
+            <div class="metric-card"><h3>Max Drawdown</h3><p>${fmt(maxDD)}%</p><span class="label">Worst Loss</span></div>
+            <div class="metric-card"><h3>VaR (95%)</h3><p>${fmt(var95)}%</p><span class="label">Bad-day Loss</span></div>
+            <div class="metric-card"><h3>Beta</h3><p>${fmt(beta, 3)}</p><span class="label">Market Sensitivity</span></div>
+        </div>
+        <div class="info"><strong>Based on</strong> ${dates.length.toLocaleString()} trading days
+            (${dates[0]} to ${dates[dates.length - 1]}) across ${usable.length} holding(s).
+            ${missing.length ? `<br><em>Skipped (no price data yet): ${missing.join(', ')}.</em>` : ''}
+        </div>`;
+
+    charts.style.display = '';
+    drawGrowthChart(dates, rets, market);
+    drawAllocationChart(norm);
+}
+
+// Cumulative growth of $10,000, portfolio vs equal-weight market benchmark.
+function drawGrowthChart(dates, rets, market) {
+    let pv = 10000, bv = 10000;
+    const portfolio = [], benchmark = [];
+    dates.forEach((d, i) => {
+        pv *= (1 + rets[i]);
+        const mr = market.get(d);
+        bv *= (1 + (mr === undefined ? 0 : mr));
+        portfolio.push(pv);
+        benchmark.push(bv);
+    });
+
+    const traces = [
+        {
+            x: dates, y: portfolio, type: 'scatter', mode: 'lines', name: 'Your portfolio',
+            line: { color: '#C0432B', width: 2 }
+        },
+        {
+            x: dates, y: benchmark, type: 'scatter', mode: 'lines', name: 'Equal-weight market',
+            line: { color: '#3E7C8C', width: 1.5, dash: 'dot' }
+        }
+    ];
+    Plotly.newPlot('builder-growth-chart', traces, Object.assign({}, BASE_LAYOUT, {
+        title: 'Growth of $10,000',
+        xaxis: { title: 'Date' },
+        yaxis: { title: 'Value ($)' },
+        hovermode: 'x unified'
+    }), { responsive: true });
+}
+
+// Doughnut of normalised weight by sector.
+function drawAllocationChart(norm) {
+    const bySector = {};
+    norm.forEach(h => {
+        const sector = (stockInfoMap[h.symbol] || {}).sector || 'Other';
+        bySector[sector] = (bySector[sector] || 0) + h.w * 100;
+    });
+    const labels = Object.keys(bySector).sort();
+    const trace = [{
+        type: 'pie', hole: 0.45,
+        labels: labels,
+        values: labels.map(s => bySector[s]),
+        marker: { colors: labels.map(s => sectorColor(s)) },
+        textinfo: 'label+percent',
+        hovertemplate: '%{label}<br>%{value:.1f}%<extra></extra>'
+    }];
+    Plotly.newPlot('builder-allocation-chart', trace, Object.assign({}, BASE_LAYOUT, {
+        title: 'Allocation by Sector'
+    }), { responsive: true });
 }
 
 // Tab switching
