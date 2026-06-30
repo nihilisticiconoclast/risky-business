@@ -33,6 +33,7 @@
                 <button class="tab-button" onclick="showTab('stocks')">Stock Analysis</button>
                 <button class="tab-button" onclick="showTab('portfolio')">Portfolio</button>
                 <button class="tab-button" onclick="showTab('builder')">Build Portfolio</button>
+                <button class="tab-button" onclick="showTab('compass')">Stock Compass</button>
                 <button class="tab-button" onclick="showTab('query')">SQL Query</button>
             </nav>
         </header>
@@ -318,6 +319,48 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div id="compass" class="tab-content" style="display: none;">
+                <h2>Stock Compass</h2>
+
+                <p class="page-intro">
+                    Point the compass and it ranks all tracked stocks by their
+                    <em>current</em> risk-and-reward, then suggests where the needle is
+                    pointing right now. It blends four signals from the live price history —
+                    risk-adjusted quality, recent momentum, longer-term trend, and stability
+                    — and reweights them to match your risk appetite.
+                </p>
+
+                <div class="callout">
+                    <strong>Educational screen, not financial advice.</strong> This is a
+                    transparent, rules-based ranking of historical price data — it has no
+                    knowledge of company fundamentals, news, or valuations, and past
+                    behaviour doesn't predict the future. Always do your own research.
+                </div>
+
+                <div class="builder-controls">
+                    <div class="builder-field">
+                        <label for="compass-appetite">Risk appetite</label>
+                        <select id="compass-appetite">
+                            <option value="conservative">Conservative</option>
+                            <option value="balanced" selected>Balanced</option>
+                            <option value="aggressive">Aggressive</option>
+                        </select>
+                    </div>
+                    <div class="builder-field">
+                        <label for="compass-region">Market</label>
+                        <select id="compass-region">
+                            <option value="all" selected>All</option>
+                            <option value="US">US only</option>
+                            <option value="UK">UK only (FTSE)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn--route" onclick="runCompass()">Find my pick</button>
+                </div>
+
+                <div id="compass-pick"></div>
+                <div id="compass-table"></div>
             </div>
 
             <div id="query" class="tab-content" style="display: none;">

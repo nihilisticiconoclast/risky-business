@@ -606,6 +606,99 @@
     padding: 1rem 0;
 }
 
+/* Stock Compass */
+.compass-pick {
+    border: 1px solid var(--route);
+    border-left: 4px solid var(--route);
+    border-radius: var(--radius);
+    padding: 1.5rem 1.75rem;
+    margin: 1.5rem 0;
+    background: color-mix(in srgb, var(--route) 6%, var(--paper));
+}
+
+.compass-pick .pick-eyebrow {
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--route);
+    margin: 0 0 .35rem;
+}
+
+.compass-pick .pick-symbol {
+    font-family: var(--font-display);
+    font-size: var(--step-3, 2rem);
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.1;
+}
+
+.compass-pick .pick-name {
+    font-family: var(--font-body);
+    color: var(--contour);
+    margin: .2rem 0 1rem;
+}
+
+.compass-pick .pick-rationale {
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    color: var(--ink);
+    max-width: var(--measure);
+}
+
+.compass-pick .pick-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    color: var(--contour);
+}
+
+.compass-pick .pick-stats strong { color: var(--ink); }
+
+.compass-table table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-family: var(--font-body);
+    font-size: var(--step-0);
+}
+
+.compass-table th,
+.compass-table td {
+    padding: .6rem .75rem;
+    text-align: right;
+    border-bottom: var(--rule);
+}
+
+.compass-table th:first-child,
+.compass-table td:first-child,
+.compass-table th:nth-child(2),
+.compass-table td:nth-child(2) {
+    text-align: left;
+}
+
+.compass-table th {
+    font-family: var(--font-data);
+    font-size: var(--step--1);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--contour);
+}
+
+.compass-table .rank-1 td { background: color-mix(in srgb, var(--route) 8%, transparent); }
+
+.compass-table .score-bar {
+    display: inline-block;
+    height: 8px;
+    border-radius: var(--radius);
+    background: var(--route);
+    vertical-align: middle;
+}
+
 /* Responsive design */
 @media (max-width: 1024px) {
     .viz-container {
