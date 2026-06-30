@@ -86,34 +86,45 @@ function loadStockList() {
             return;
         }
         
-        const stmt = db.prepare("SELECT DISTINCT symbol, name FROM stocks ORDER BY symbol");
+        const stmt = db.prepare(
+            "SELECT symbol, name, sector, region FROM stocks ORDER BY sector, symbol");
         const stocks = [];
         while (stmt.step()) {
             // getAsObject() returns a {column: value} object; get() returns a
             // positional array, which is why named access used to be undefined.
-            const row = stmt.getAsObject();
-            stocks.push(row);
+            stocks.push(stmt.getAsObject());
         }
         stmt.free();
-        
+
         const select = document.getElementById('stock-select');
         if (!select) {
             console.error("stock-select element not found");
             return;
         }
-        
+
         select.innerHTML = '<option value="">-- Select a stock --</option>';
-        
+
+        // Group the options by sector using <optgroup> for easier scanning.
+        const bySector = {};
         stocks.forEach(stock => {
-            const option = document.createElement('option');
-            // Use lowercase property names as sql.js returns them
-            const symbol = stock.symbol || stock.SYMBOL || 'Unknown';
-            const name = stock.name || stock.NAME || 'Unknown';
-            option.value = symbol;
-            option.textContent = `${symbol} - ${name}`;
-            select.appendChild(option);
+            const sector = stock.sector || 'Other';
+            (bySector[sector] = bySector[sector] || []).push(stock);
         });
-        
+        Object.keys(bySector).sort().forEach(sector => {
+            const group = document.createElement('optgroup');
+            group.label = sector;
+            bySector[sector].forEach(stock => {
+                const option = document.createElement('option');
+                const symbol = stock.symbol || 'Unknown';
+                const name = stock.name || 'Unknown';
+                const region = stock.region ? ` · ${stock.region}` : '';
+                option.value = symbol;
+                option.textContent = `${symbol} — ${name}${region}`;
+                group.appendChild(option);
+            });
+            select.appendChild(group);
+        });
+
         console.log(`Loaded ${stocks.length} stocks`);
     } catch (err) {
         console.error("Error loading stock list:", err);
@@ -128,7 +139,13 @@ function loadAllStockMetrics() {
             return;
         }
         
-        const stmt = db.prepare("SELECT * FROM stock_risk_metrics ORDER BY symbol");
+        // Join in sector/region so the comparison charts can group by sector.
+        const stmt = db.prepare(`
+            SELECT m.*, s.sector, s.region
+            FROM stock_risk_metrics m
+            JOIN stocks s ON s.symbol = m.symbol
+            ORDER BY s.sector, m.symbol
+        `);
         stockData = [];
         while (stmt.step()) {
             stockData.push(stmt.getAsObject());
@@ -246,118 +263,114 @@ async function loadVisualizations() {
     }
 }
 
-// Create portfolio charts using Plotly.js
+// Distinct colour per sector, so the same sector reads consistently across
+// every chart. Falls back to a neutral grey for any unmapped sector.
+const SECTOR_COLORS = {
+    'Technology': '#3E7C8C',
+    'Communication Services': '#8E6E95',
+    'Consumer Discretionary': '#C0432B',
+    'Consumer Staples': '#D98E32',
+    'Financial Services': '#4A7C59',
+    'Health Care': '#C75D6F',
+    'Energy': '#6B4226',
+    'Industrials': '#7A8B99',
+    'Materials': '#9C7A3C',
+    'Utilities': '#5B8A72',
+    'Real Estate': '#A6583C'
+};
+const sectorColor = sector => SECTOR_COLORS[sector] || '#999999';
+
+// Common Plotly layout bits (Tunnel palette).
+const BASE_LAYOUT = {
+    showlegend: true,
+    legend: { orientation: 'h', y: -0.25, font: { size: 11 } },
+    plot_bgcolor: '#EDE7D3',
+    paper_bgcolor: '#EDE7D3',
+    font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
+};
+
+// Group stockData by sector, preserving the sector-sorted order.
+function groupBySector() {
+    const groups = {};
+    stockData.forEach(s => {
+        const sector = s.sector || 'Other';
+        (groups[sector] = groups[sector] || []).push(s);
+    });
+    return groups;
+}
+
+// Build one bar trace per sector so the chart is coloured and legended by
+// sector. valueFn maps a stock row to its bar height.
+function sectorBarTraces(valueFn, fmt) {
+    const groups = groupBySector();
+    return Object.keys(groups).sort().map(sector => ({
+        name: sector,
+        type: 'bar',
+        x: groups[sector].map(s => s.symbol),
+        y: groups[sector].map(valueFn),
+        marker: { color: sectorColor(sector), line: { color: '#4A3823', width: 1 } },
+        text: groups[sector].map(s => `${s.symbol} (${sector})<br>${fmt(s)}`),
+        hoverinfo: 'text'
+    }));
+}
+
+// Create portfolio charts using Plotly.js, grouped by sector.
 function createPortfolioCharts() {
     if (stockData.length === 0) return;
-    
+
+    // Keep bars in sector-clustered order on a shared x-axis.
+    const categoryOrder = stockData.map(s => s.symbol);
+    const barXAxis = { title: 'Stock', categoryorder: 'array', categoryarray: categoryOrder };
+
     // Volatility chart
-    const volatilityData = [{
-        x: stockData.map(s => s.symbol),
-        y: stockData.map(s => s.volatility * 100),
-        type: 'bar',
-        marker: {
-            color: '#C0432B',  // Using Tunnel's --route color
-            line: { color: '#4A3823', width: 1 }  // Using Tunnel's --ink color
-        },
-        text: stockData.map(s => `${(s.volatility * 100).toFixed(2)}%<br>Obs: ${s.observations}`),
-        hoverinfo: 'text+y'
-    }];
-    
-    const volatilityLayout = {
-        title: 'Annualized Volatility by Stock',
-        xaxis: { title: 'Stock' },
-        yaxis: { title: 'Volatility (%)' },
-        showlegend: false,
-        plot_bgcolor: '#EDE7D3',  // Tunnel's --paper
-        paper_bgcolor: '#EDE7D3',
-        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
-    };
-    
-    Plotly.newPlot('volatility-chart', volatilityData, volatilityLayout, {responsive: true});
-    
+    Plotly.newPlot('volatility-chart',
+        sectorBarTraces(s => s.volatility * 100,
+            s => `Volatility: ${(s.volatility * 100).toFixed(2)}%`),
+        Object.assign({}, BASE_LAYOUT, {
+            title: 'Annualized Volatility by Stock (grouped by sector)',
+            xaxis: barXAxis, yaxis: { title: 'Volatility (%)' }
+        }), { responsive: true });
+
     // Sharpe ratio chart
-    const sharpeData = [{
-        x: stockData.map(s => s.symbol),
-        y: stockData.map(s => s.sharpe_ratio || 0),
-        type: 'bar',
-        marker: {
-            color: stockData.map(s => s.sharpe_ratio || 0),
-            colorscale: [[0, '#C0432B'], [0.5, '#EDE7D3'], [1, '#3E7C8C']],
-            showscale: true,
-            colorbar: { title: 'Sharpe Ratio' }
-        },
-        text: stockData.map(s => `${(s.sharpe_ratio || 0).toFixed(2)}<br>Obs: ${s.observations}`),
-        hoverinfo: 'text+y'
-    }];
-    
-    const sharpeLayout = {
-        title: 'Sharpe Ratio by Stock',
-        xaxis: { title: 'Stock' },
-        yaxis: { title: 'Sharpe Ratio' },
-        showlegend: false,
-        plot_bgcolor: '#EDE7D3',
-        paper_bgcolor: '#EDE7D3',
-        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
-    };
-    
-    Plotly.newPlot('sharpe-chart', sharpeData, sharpeLayout, {responsive: true});
-    
+    Plotly.newPlot('sharpe-chart',
+        sectorBarTraces(s => s.sharpe_ratio || 0,
+            s => `Sharpe: ${(s.sharpe_ratio || 0).toFixed(2)}`),
+        Object.assign({}, BASE_LAYOUT, {
+            title: 'Sharpe Ratio by Stock (grouped by sector)',
+            xaxis: barXAxis, yaxis: { title: 'Sharpe Ratio' }
+        }), { responsive: true });
+
     // Max drawdown chart
-    const drawdownData = [{
-        x: stockData.map(s => s.symbol),
-        y: stockData.map(s => s.max_drawdown * 100),
-        type: 'bar',
-        marker: {
-            color: '#C0432B',
-            line: { color: '#4A3823', width: 1 }
-        },
-        text: stockData.map(s => `${(s.max_drawdown * 100).toFixed(2)}%<br>Obs: ${s.observations}`),
-        hoverinfo: 'text+y'
-    }];
-    
-    const drawdownLayout = {
-        title: 'Maximum Drawdown by Stock',
-        xaxis: { title: 'Stock' },
-        yaxis: { title: 'Max Drawdown (%)' },
-        showlegend: false,
-        plot_bgcolor: '#EDE7D3',
-        paper_bgcolor: '#EDE7D3',
-        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
-    };
-    
-    Plotly.newPlot('drawdown-chart', drawdownData, drawdownLayout, {responsive: true});
-    
-    // Risk-return scatter plot
-    const scatterData = [{
-        x: stockData.map(s => (s.mean_return * 252 * 100)),
-        y: stockData.map(s => s.volatility * 100),
+    Plotly.newPlot('drawdown-chart',
+        sectorBarTraces(s => s.max_drawdown * 100,
+            s => `Max Drawdown: ${(s.max_drawdown * 100).toFixed(2)}%`),
+        Object.assign({}, BASE_LAYOUT, {
+            title: 'Maximum Drawdown by Stock (grouped by sector)',
+            xaxis: barXAxis, yaxis: { title: 'Max Drawdown (%)' }
+        }), { responsive: true });
+
+    // Risk-return scatter plot, one trace per sector.
+    const groups = groupBySector();
+    const scatterData = Object.keys(groups).sort().map(sector => ({
+        name: sector,
         mode: 'markers+text',
         type: 'scatter',
-        text: stockData.map(s => s.symbol),
+        x: groups[sector].map(s => s.mean_return * 252 * 100),
+        y: groups[sector].map(s => s.volatility * 100),
+        text: groups[sector].map(s => s.symbol),
         textposition: 'top center',
-        textfont: { size: 12, family: 'IBM Plex Mono, monospace' },
-        marker: {
-            size: stockData.map(s => Math.max(10, s.observations / 50)),
-            color: stockData.map(s => s.sharpe_ratio || 0),
-            colorscale: 'Viridis',
-            showscale: true,
-            colorbar: { title: 'Sharpe Ratio' },
-            line: { color: '#4A3823', width: 1 }
-        },
-        hoverinfo: 'text+x+y+name'
-    }];
-    
-    const scatterLayout = {
-        title: 'Risk-Return Profile',
-        xaxis: { title: 'Annualized Return (%)' },
-        yaxis: { title: 'Annualized Volatility (%)' },
-        showlegend: false,
-        plot_bgcolor: '#EDE7D3',
-        paper_bgcolor: '#EDE7D3',
-        font: { family: 'Public Sans, sans-serif', color: '#4A3823' }
-    };
-    
-    Plotly.newPlot('risk-return-scatter', scatterData, scatterLayout, {responsive: true});
+        textfont: { size: 10, family: 'IBM Plex Mono, monospace' },
+        marker: { size: 11, color: sectorColor(sector), line: { color: '#4A3823', width: 1 } },
+        hovertemplate: '%{text}<br>Return: %{x:.1f}%<br>Volatility: %{y:.1f}%' +
+                       `<extra>${sector}</extra>`
+    }));
+
+    Plotly.newPlot('risk-return-scatter', scatterData,
+        Object.assign({}, BASE_LAYOUT, {
+            title: 'Risk-Return Profile (grouped by sector)',
+            xaxis: { title: 'Annualized Return (%)' },
+            yaxis: { title: 'Annualized Volatility (%)' }
+        }), { responsive: true });
 }
 
 // Load stock metrics
@@ -657,10 +670,21 @@ function showTab(tabName) {
     });
     
     // Show selected tab
-    document.getElementById(tabName).style.display = 'block';
-    
+    const activeTab = document.getElementById(tabName);
+    activeTab.style.display = 'block';
+
+    // Plotly charts rendered while their tab was hidden (width 0) don't size to
+    // their container; resize them now that the tab is visible.
+    if (typeof Plotly !== 'undefined') {
+        activeTab.querySelectorAll('.js-plotly-plot').forEach(plot => {
+            try { Plotly.Plots.resize(plot); } catch (e) { /* not yet drawn */ }
+        });
+    }
+
     // Add active class to clicked button
-    event.target.classList.add('active');
+    if (typeof event !== 'undefined' && event.target) {
+        event.target.classList.add('active');
+    }
 }
 
 // Initialize Tunnel signature figures
