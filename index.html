@@ -264,19 +264,34 @@
                     <p class="page-intro">
                         Project the portfolio forward by simulating thousands of possible
                         futures and looking at the <em>range</em> of where it could land.
-                        <strong>Historical bootstrap</strong> resamples the portfolio's own
-                        past daily returns (keeping its real fat tails and skew);
-                        <strong>GBM</strong> assumes normally-distributed daily moves
-                        calibrated to its history. This is a distribution of possibilities,
-                        not a forecast — past behaviour doesn't guarantee the future.
+                        Choose how daily moves are drawn — <strong>historical bootstrap</strong>
+                        (resample real history, keeping its fat tails), <strong>normal</strong>,
+                        or <strong>Student-t</strong> for deliberately fatter tails — and
+                        whether to simulate the <strong>blended</strong> portfolio series or
+                        <strong>each asset with its correlations</strong>. The per-asset model
+                        uses the covariance structure, so you can change weights above and
+                        stress-test mixes you never actually held. This is a distribution of
+                        possibilities, not a forecast.
                     </p>
                     <div class="builder-controls">
                         <div class="builder-field">
-                            <label for="mc-method">Method</label>
-                            <select id="mc-method">
-                                <option value="bootstrap">Historical bootstrap</option>
-                                <option value="gbm">Geometric Brownian Motion</option>
+                            <label for="mc-dist">Distribution</label>
+                            <select id="mc-dist">
+                                <option value="historical">Historical (bootstrap)</option>
+                                <option value="normal">Normal (GBM)</option>
+                                <option value="t">Student-t (fat tails)</option>
                             </select>
+                        </div>
+                        <div class="builder-field">
+                            <label for="mc-corr">Asset model</label>
+                            <select id="mc-corr">
+                                <option value="blended">Blended portfolio</option>
+                                <option value="perasset">Per-asset, correlated</option>
+                            </select>
+                        </div>
+                        <div class="builder-field">
+                            <label for="mc-dof" title="Degrees of freedom for Student-t; lower = fatter tails">Tail ν</label>
+                            <input id="mc-dof" type="number" min="3" max="30" step="1" value="5">
                         </div>
                         <div class="builder-field">
                             <label for="mc-horizon">Horizon</label>
