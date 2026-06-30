@@ -45,5 +45,5 @@ jobs:
             echo "No data changes to commit."
           else
             git commit -m "Auto-update market data ($(date -u +%Y-%m-%d))"
-            git push
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi

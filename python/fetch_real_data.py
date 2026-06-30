@@ -7,25 +7,30 @@ download_data.py -> clean_data.py -> build_database.py -> calculate_metrics.R
 pipeline. It uses only the Python standard library (urllib, csv, sqlite3,
 math) so it needs neither pandas, yfinance, nor R.
 
-Data source: Stooq (https://stooq.com) daily CSV endpoint. Stooq is free,
-requires no API key and no signup, and serves split-adjusted daily OHLCV
-data for US equities as `<TICKER>.us`.
+Data sources (both free, no API key): the script tries Stooq
+(https://stooq.com) first and falls back to the Yahoo Finance v8 chart API
+(https://query1.finance.yahoo.com). Two providers matter for automation:
+Stooq frequently rate-limits datacenter IPs (e.g. CI runners), whereas the
+Yahoo endpoint is usually reachable from them, so the fallback keeps the
+scheduled GitHub Actions refresh working.
 
 Usage:
     python python/fetch_real_data.py
 
-If Stooq is unreachable (e.g. a sandboxed/offline environment), the script
-exits with a clear message and leaves any existing database untouched, so you
-can fall back to `python python/generate_sample_data.py`.
+If every provider is unreachable (e.g. a sandboxed/offline environment), the
+script exits with a clear message and leaves any existing database untouched,
+so you can fall back to `python python/generate_sample_data.py`.
 
-Swapping providers: only `fetch_prices()` is provider-specific. To use a
-different free API (Alpha Vantage, Tiingo, Twelve Data, ...), replace that one
-function so it returns the same list of row dicts; the rest of the pipeline is
+Swapping/adding providers: each provider is a small `_fetch_*` function
+returning the same list of row dicts; add one to the `PROVIDERS` list (e.g.
+Alpha Vantage, Tiingo, Twelve Data). The rest of the pipeline is
 provider-agnostic.
 """
 
+import calendar
 import csv
 import io
+import json
 import math
 import os
 import sqlite3
@@ -33,13 +38,15 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Configuration ---------------------------------------------------------------
 TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JPM', 'V', 'PG', 'DIS']
-YEARS_OF_HISTORY = 10  # Stooq serves decades of free daily history, no key
+YEARS_OF_HISTORY = 10  # both providers serve decades of free daily history
 TRADING_DAYS = 252  # for annualization
-REQUEST_DELAY_SECONDS = 1.0  # be polite to Stooq between requests
+REQUEST_DELAY_SECONDS = 1.0  # be polite between requests
+USER_AGENT = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+              '(KHTML, like Gecko) Chrome/120.0 Safari/537.36')
 DB_PATH = 'data/processed/finance_data.db'
 
 STOCK_INFO = [
@@ -64,34 +71,34 @@ SAMPLE_HOLDINGS = [
 
 
 # Provider-specific layer -----------------------------------------------------
-def fetch_prices(ticker, start_date, end_date):
-    """Download daily OHLCV rows for one ticker from Stooq.
+class ProviderError(Exception):
+    """Raised when a data provider returns nothing usable."""
 
-    Returns a list of dicts with keys: date, open, high, low, close, volume,
-    adjusted_close. Stooq daily data is already split-adjusted, so we use the
-    close as the adjusted close (it has no separate dividend/adjusted column).
-    Raises urllib.error.URLError on a network/policy failure.
-    """
-    d1 = start_date.strftime('%Y%m%d')
-    d2 = end_date.strftime('%Y%m%d')
-    url = (
-        f'https://stooq.com/q/d/l/?s={ticker.lower()}.us'
-        f'&d1={d1}&d2={d2}&i=d'
-    )
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+
+def _http_get(url):
+    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
     with urllib.request.urlopen(req, timeout=30) as resp:
-        text = resp.read().decode('utf-8')
+        return resp.read().decode('utf-8')
 
-    # Stooq returns "No data" (not CSV) when a symbol/range is unavailable.
-    if not text.lstrip().lower().startswith('date'):
-        raise ValueError(f'Unexpected response for {ticker}: {text[:60]!r}')
+
+def _fetch_stooq(ticker, start_date, end_date):
+    """Stooq daily CSV. Free, no key. Often rate-limits datacenter IPs."""
+    url = (f'https://stooq.com/q/d/l/?s={ticker.lower()}.us'
+           f'&d1={start_date:%Y%m%d}&d2={end_date:%Y%m%d}&i=d')
+    text = _http_get(url)
+    head = text.lstrip().lower()
+    if 'exceeded the daily hits limit' in head:
+        raise ProviderError('rate limit exceeded')
+    if not head.startswith('date'):
+        # Stooq returns "No data"/HTML when blocked or symbol unavailable.
+        raise ProviderError(f'unexpected response {text[:60]!r}')
 
     rows = []
     for r in csv.DictReader(io.StringIO(text)):
         try:
             close = float(r['Close'])
         except (KeyError, ValueError):
-            continue  # skip malformed / blank rows
+            continue
         rows.append({
             'date': r['Date'],
             'open': float(r.get('Open') or close),
@@ -99,9 +106,74 @@ def fetch_prices(ticker, start_date, end_date):
             'low': float(r.get('Low') or close),
             'close': close,
             'volume': int(float(r.get('Volume') or 0)),
-            'adjusted_close': close,
+            'adjusted_close': close,  # Stooq daily is split-adjusted
         })
+    if not rows:
+        raise ProviderError('no rows parsed')
     return rows
+
+
+def _fetch_yahoo(ticker, start_date, end_date):
+    """Yahoo Finance v8 chart API (JSON). Free, no key; reachable from CI IPs."""
+    p1 = calendar.timegm(start_date.timetuple())
+    p2 = calendar.timegm(end_date.timetuple())
+    url = (f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'
+           f'?period1={p1}&period2={p2}&interval=1d&events=div%2Csplit')
+    data = json.loads(_http_get(url))
+    chart = data.get('chart') or {}
+    if chart.get('error'):
+        raise ProviderError(f"yahoo error {chart['error']}")
+    result = (chart.get('result') or [None])[0]
+    if not result:
+        raise ProviderError('empty result')
+
+    timestamps = result.get('timestamp') or []
+    quote = (result.get('indicators', {}).get('quote') or [{}])[0]
+    adj_block = (result.get('indicators', {}).get('adjclose') or [{}])[0]
+    adjclose = adj_block.get('adjclose')
+    opens, highs = quote.get('open', []), quote.get('high', [])
+    lows, closes = quote.get('low', []), quote.get('close', [])
+    volumes = quote.get('volume', [])
+
+    rows = []
+    for i, ts in enumerate(timestamps):
+        close = closes[i] if i < len(closes) else None
+        if close is None:
+            continue  # holiday / missing bar
+        adj = adjclose[i] if (adjclose and i < len(adjclose)
+                              and adjclose[i] is not None) else close
+        rows.append({
+            'date': datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d'),
+            'open': float(opens[i]) if i < len(opens) and opens[i] is not None else close,
+            'high': float(highs[i]) if i < len(highs) and highs[i] is not None else close,
+            'low': float(lows[i]) if i < len(lows) and lows[i] is not None else close,
+            'close': float(close),
+            'volume': int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
+            'adjusted_close': float(adj),
+        })
+    if not rows:
+        raise ProviderError('no usable rows')
+    return rows
+
+
+# Try providers in order; first one that returns data wins.
+PROVIDERS = [('Stooq', _fetch_stooq), ('Yahoo', _fetch_yahoo)]
+
+
+def fetch_prices(ticker, start_date, end_date):
+    """Download daily OHLCV rows for one ticker, trying each provider in turn.
+
+    Returns a list of dicts: date, open, high, low, close, volume,
+    adjusted_close. Raises ProviderError if every provider fails.
+    """
+    errors = []
+    for name, fn in PROVIDERS:
+        try:
+            return fn(ticker, start_date, end_date)
+        except (ProviderError, urllib.error.URLError, ValueError,
+                KeyError, TimeoutError) as e:
+            errors.append(f'{name}: {e}')
+    raise ProviderError('; '.join(errors))
 
 
 # Provider-agnostic metric math (pure stdlib) ---------------------------------
@@ -322,7 +394,8 @@ def main():
             price_data[ticker] = rows
             print(f"  {ticker}: {len(rows)} trading days "
                   f"({rows[0]['date']} to {rows[-1]['date']})")
-        except (urllib.error.URLError, ValueError, TimeoutError) as e:
+        except (ProviderError, urllib.error.URLError, ValueError,
+                TimeoutError) as e:
             failures.append((ticker, str(e)))
             print(f"  {ticker}: FAILED ({e})")
 
