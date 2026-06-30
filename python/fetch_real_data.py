@@ -7,12 +7,14 @@ download_data.py -> clean_data.py -> build_database.py -> calculate_metrics.R
 pipeline. It uses only the Python standard library (urllib, csv, sqlite3,
 math) so it needs neither pandas, yfinance, nor R.
 
-Data sources (both free, no API key): the script tries Stooq
-(https://stooq.com) first and falls back to the Yahoo Finance v8 chart API
-(https://query1.finance.yahoo.com). Two providers matter for automation:
-Stooq frequently rate-limits datacenter IPs (e.g. CI runners), whereas the
-Yahoo endpoint is usually reachable from them, so the fallback keeps the
-scheduled GitHub Actions refresh working.
+Data sources (all free):
+  * Tiingo (https://tiingo.com) -- keyed, used first when TIINGO_API_KEY is
+    set. Recommended for automation: the key authenticates you, so it works
+    from CI runners.
+  * Stooq (https://stooq.com) and the Yahoo Finance v8 chart API -- keyless
+    fallbacks. Convenient for local runs, but both block/throttle datacenter
+    IPs (GitHub Actions runners get an HTML block page / HTTP 429), so they are
+    not reliable for the scheduled refresh.
 
 Usage:
     python python/fetch_real_data.py
@@ -47,6 +49,10 @@ TRADING_DAYS = 252  # for annualization
 REQUEST_DELAY_SECONDS = 1.0  # be polite between requests
 USER_AGENT = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/120.0 Safari/537.36')
+# Tiingo is a free, keyed provider. It authenticates by token, so unlike the
+# keyless sources it is not blocked from datacenter IPs (CI runners). Set the
+# TIINGO_API_KEY env var (or repo secret) to enable it; it then takes priority.
+TIINGO_TOKEN = os.environ.get('TIINGO_API_KEY', '').strip()
 DB_PATH = 'data/processed/finance_data.db'
 
 STOCK_INFO = [
@@ -75,10 +81,48 @@ class ProviderError(Exception):
     """Raised when a data provider returns nothing usable."""
 
 
-def _http_get(url):
-    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+def _http_get(url, headers=None):
+    hdrs = {'User-Agent': USER_AGENT}
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, headers=hdrs)
     with urllib.request.urlopen(req, timeout=30) as resp:
         return resp.read().decode('utf-8')
+
+
+def _fetch_tiingo(ticker, start_date, end_date):
+    """Tiingo daily EOD prices (JSON). Free with an API key; CI-friendly."""
+    if not TIINGO_TOKEN:
+        raise ProviderError('TIINGO_API_KEY not set')
+    url = (f'https://api.tiingo.com/tiingo/daily/{ticker}/prices'
+           f'?startDate={start_date:%Y-%m-%d}&endDate={end_date:%Y-%m-%d}'
+           f'&format=json')
+    # Token goes in the header, not the URL, so it stays out of logs.
+    text = _http_get(url, headers={'Content-Type': 'application/json',
+                                   'Authorization': f'Token {TIINGO_TOKEN}'})
+    data = json.loads(text)
+    if not isinstance(data, list):
+        raise ProviderError(f'unexpected payload {str(data)[:80]!r}')
+
+    rows = []
+    for d in data:
+        close = d.get('close')
+        if close is None:
+            continue
+        rows.append({
+            'date': str(d.get('date', ''))[:10],
+            'open': float(d.get('open') if d.get('open') is not None else close),
+            'high': float(d.get('high') if d.get('high') is not None else close),
+            'low': float(d.get('low') if d.get('low') is not None else close),
+            'close': float(close),
+            'volume': int(d.get('volume') or 0),
+            # adjClose is split- and dividend-adjusted; preferred for returns.
+            'adjusted_close': float(d.get('adjClose')
+                                    if d.get('adjClose') is not None else close),
+        })
+    if not rows:
+        raise ProviderError('no rows')
+    return rows
 
 
 def _fetch_stooq(ticker, start_date, end_date):
@@ -156,8 +200,11 @@ def _fetch_yahoo(ticker, start_date, end_date):
     return rows
 
 
-# Try providers in order; first one that returns data wins.
-PROVIDERS = [('Stooq', _fetch_stooq), ('Yahoo', _fetch_yahoo)]
+# Try providers in order; first one that returns data wins. Tiingo goes first
+# when a key is configured (works from CI); the keyless sources remain as a
+# fallback for local runs from a residential IP.
+PROVIDERS = ([('Tiingo', _fetch_tiingo)] if TIINGO_TOKEN else []) + [
+    ('Stooq', _fetch_stooq), ('Yahoo', _fetch_yahoo)]
 
 
 def fetch_prices(ticker, start_date, end_date):
@@ -381,7 +428,9 @@ def build_database(price_data):
 def main():
     end = datetime.today()
     start = end - timedelta(days=365 * YEARS_OF_HISTORY)
-    print(f"Fetching real prices from Stooq ({start:%Y-%m-%d} to {end:%Y-%m-%d})...")
+    providers = ', '.join(name for name, _ in PROVIDERS)
+    print(f"Fetching real prices ({start:%Y-%m-%d} to {end:%Y-%m-%d}) "
+          f"via: {providers}...")
 
     price_data, failures = {}, []
     for i, ticker in enumerate(TICKERS):
