@@ -42,12 +42,74 @@
         <main>
             <div id="overview" class="tab-content">
                 <h2>Portfolio Summary</h2>
+
+                <div class="callout">
+                    <strong>Heads up — this is a built-in sample portfolio, not yours.</strong>
+                    So that the dashboard has something to show out of the box, it ships
+                    with a demo basket called the <em>“Sample Tech Portfolio.”</em> You
+                    haven’t added anything — there isn’t an “add my portfolio” button yet.
+                    The holdings live in the data pipeline (the <code>SAMPLE_HOLDINGS</code>
+                    list in <code>python/fetch_real_data.py</code>) and currently hold
+                    <strong>100 AAPL, 100 MSFT, 50 GOOGL and 20 AMZN</strong>, weighted by
+                    market value. Edit those rows and re-run the fetcher to model your own
+                    holdings.
+                </div>
+
+                <p class="page-intro">
+                    The four numbers below treat that whole basket as a single investment
+                    and summarise how it behaved over the past ~10 years: how much it grew,
+                    how bumpy the ride was, whether the reward justified the risk, and the
+                    worst drop it suffered along the way. Use the <strong>Portfolio</strong>
+                    tab to compare individual stocks, or <strong>Stock Analysis</strong> to
+                    drill into one.
+                </p>
+
                 <div id="portfolio-summary"></div>
+
+                <p class="section-label">What these numbers mean</p>
+                <dl class="glossary">
+                    <div>
+                        <dt>Annualized Return</dt>
+                        <dd>The portfolio’s average growth rate expressed as a yearly figure
+                            (daily returns scaled up by 252 trading days). It tells you about
+                            reward only — not how risky earning it was.</dd>
+                    </div>
+                    <div>
+                        <dt>Annualized Volatility</dt>
+                        <dd>How much the returns swing around that average, stated per year.
+                            Higher means a bumpier, less predictable ride. Roughly 15–25% is
+                            typical for a single large-cap stock; a diversified basket is
+                            usually lower.</dd>
+                    </div>
+                    <div>
+                        <dt>Sharpe Ratio</dt>
+                        <dd>Return earned per unit of risk — the single best “bang for your
+                            buck” number. Above 1 is good, above 2 is excellent. It lets you
+                            compare investments fairly even when their volatilities differ.</dd>
+                    </div>
+                    <div>
+                        <dt>Max Drawdown</dt>
+                        <dd>The largest peak-to-trough fall over the period — i.e. the worst
+                            loss you’d have lived through if you’d bought at the high and held
+                            to the low. Shown as a negative percentage; closer to zero is
+                            safer.</dd>
+                    </div>
+                </dl>
+
                 <div id="portfolio-visualizations"></div>
             </div>
 
             <div id="stocks" class="tab-content" style="display: none;">
                 <h2>Individual Stock Risk Metrics</h2>
+
+                <p class="page-intro">
+                    Pick any of the tracked stocks to see its personal risk-and-reward
+                    profile, followed by its full price history and its day-to-day
+                    returns. This is the place to ask “how has this one name actually
+                    behaved?” — the cards below quantify it, and the charts let you eyeball
+                    the trend and the turbulence.
+                </p>
+
                 <div id="stock-selector">
                     <label for="stock-select">Select Stock:</label>
                     <select id="stock-select" onchange="loadStockMetrics()">
@@ -55,29 +117,90 @@
                     </select>
                 </div>
                 <div id="stock-metrics"></div>
+
+                <p class="section-label">Reading the cards</p>
+                <dl class="glossary">
+                    <div>
+                        <dt>Annualized Return &amp; Volatility</dt>
+                        <dd>Same idea as on the summary, but for this single stock: its
+                            average yearly growth, and how much that growth bounces around.</dd>
+                    </div>
+                    <div>
+                        <dt>Sharpe Ratio</dt>
+                        <dd>This stock’s reward-per-unit-of-risk. Handy for asking whether a
+                            racier name actually pays you for the extra white-knuckle moments.</dd>
+                    </div>
+                    <div>
+                        <dt>Max Drawdown</dt>
+                        <dd>Its worst peak-to-trough decline over the period — the deepest hole
+                            it dug before recovering.</dd>
+                    </div>
+                    <div>
+                        <dt>VaR (95%)</dt>
+                        <dd>Value at Risk. On a typical day, 19 days out of 20 the loss stays
+                            smaller than this figure — it’s a quick read on the “bad but not
+                            catastrophic” daily move you should expect.</dd>
+                    </div>
+                    <div>
+                        <dt>Beta</dt>
+                        <dd>How tightly the stock moves with the overall market (here, the
+                            equal-weighted average of every tracked stock). 1.0 means it moves
+                            in step; above 1 amplifies the market’s swings, below 1 cushions
+                            them.</dd>
+                    </div>
+                    <div>
+                        <dt>Observations</dt>
+                        <dd>How many trading days of data went into these numbers — more days
+                            means a more reliable estimate.</dd>
+                    </div>
+                </dl>
+
                 <div id="stock-price-chart"></div>
                 <div id="stock-returns-chart"></div>
             </div>
 
             <div id="portfolio" class="tab-content" style="display: none;">
                 <h2>Portfolio Analysis</h2>
+
+                <p class="page-intro">
+                    These charts line up <em>every</em> tracked stock side by side so you can
+                    compare them at a glance across the four risk dimensions. Patterns jump
+                    out here that single numbers hide — which names are calm versus jumpy,
+                    which pay you best for their risk, and which have historically fallen the
+                    hardest. All charts are interactive: hover for exact values, drag to zoom,
+                    double-click to reset.
+                </p>
+
                 <div class="viz-container">
                     <div class="viz-box">
                         <h3>Risk-Return Profile</h3>
+                        <p class="chart-note">Each dot is a stock: horizontal = annualized
+                            return, vertical = volatility (risk), and colour = Sharpe ratio.
+                            The sweet spot is the bottom-right — strong return for low risk.
+                            Dots up top took big swings to get there.</p>
                         <div id="risk-return-scatter"></div>
                     </div>
                     <div class="viz-box">
                         <h3>Volatility Comparison</h3>
+                        <p class="chart-note">Taller bars are bumpier, less predictable
+                            stocks. This is pure risk, ignoring whether the stock actually
+                            went up.</p>
                         <div id="volatility-chart"></div>
                     </div>
                 </div>
                 <div class="viz-container">
                     <div class="viz-box">
                         <h3>Sharpe Ratio Comparison</h3>
+                        <p class="chart-note">Taller bars delivered more return per unit of
+                            risk — the closest thing to an all-round “quality” score. Bars
+                            below zero lost money over the period.</p>
                         <div id="sharpe-chart"></div>
                     </div>
                     <div class="viz-box">
                         <h3>Max Drawdown Comparison</h3>
+                        <p class="chart-note">Bars point down because drawdowns are losses.
+                            The longer the bar, the deeper the worst-case fall that stock has
+                            put investors through.</p>
                         <div id="drawdown-chart"></div>
                     </div>
                 </div>
@@ -85,6 +208,23 @@
 
             <div id="query" class="tab-content" style="display: none;">
                 <h2>Custom SQL Query</h2>
+
+                <p class="page-intro">
+                    The entire dataset is a SQLite database that runs <em>inside your
+                    browser</em> — nothing is sent to a server. Write any read-only SQL below
+                    to slice the data your own way: rank stocks, filter by sector, join prices
+                    to metrics, whatever you like. The available tables are listed in the box;
+                    click an example to drop it into the editor and run it.
+                </p>
+
+                <p class="section-label">Try one of these</p>
+                <div class="example-queries">
+                    <button type="button" class="example-query" onclick="setQuery('SELECT symbol, sharpe_ratio, volatility FROM stock_risk_metrics ORDER BY sharpe_ratio DESC')">Best risk-adjusted returns</button>
+                    <button type="button" class="example-query" onclick="setQuery('SELECT symbol, volatility FROM stock_risk_metrics ORDER BY volatility DESC LIMIT 5')">5 most volatile stocks</button>
+                    <button type="button" class="example-query" onclick="setQuery('SELECT sector, COUNT(*) AS stocks FROM stocks GROUP BY sector ORDER BY stocks DESC')">Stocks per sector</button>
+                    <button type="button" class="example-query" onclick="setQuery('SELECT symbol, beta FROM stock_risk_metrics ORDER BY beta DESC')">Most market-sensitive (beta)</button>
+                </div>
+
                 <div class="query-container">
                     <textarea id="sql-query" rows="10" placeholder="SELECT * FROM stock_risk_metrics;
 
@@ -108,7 +248,7 @@ Other tables available:
                 <span class="wordmark" style="font-size: var(--step--1);">Risk Metrics Dashboard</span>
             </div>
             <div style="font-family: var(--font-data); font-size: var(--step--1); color: var(--contour);">
-                Data: Yahoo Finance | Built with SQL, R, Python, JavaScript | 
+                Data: Tiingo (end-of-day prices) | Built with SQL, Python, JavaScript |
                 <a href="https://github.com/nihilisticiconoclast/risky-business" target="_blank">View on GitHub</a>
             </div>
         </footer>
