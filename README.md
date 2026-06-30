@@ -170,9 +170,11 @@ risky-business/
 ## Customization
 
 ### Add New Stocks
-Edit the `TICKERS` list in `python/fetch_real_data.py` (real data) or
-`python/download_data.py` (legacy yfinance path), and add a matching row to
-`STOCK_INFO` so the new symbol gets a name/sector.
+Add one `(symbol, name, sector, industry)` row to `STOCK_INFO` in
+`python/fetch_real_data.py` — the fetch list (`TICKERS`) is derived from it, so
+that single edit is enough. The dashboard ships with 35 stocks spanning all 11
+S&P sectors. Re-run `python python/fetch_real_data.py` (or the GitHub Action) to
+pull the new symbol's history.
 
 ### Modify Portfolio
 Edit the sample portfolio in `python/build_database.py` or create new entries in the SQLite database.

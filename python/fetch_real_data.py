@@ -43,7 +43,6 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 # Configuration ---------------------------------------------------------------
-TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JPM', 'V', 'PG', 'DIS']
 YEARS_OF_HISTORY = 10  # both providers serve decades of free daily history
 TRADING_DAYS = 252  # for annualization
 REQUEST_DELAY_SECONDS = 1.0  # be polite between requests
@@ -55,6 +54,9 @@ USER_AGENT = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
 TIINGO_TOKEN = os.environ.get('TIINGO_API_KEY', '').strip()
 DB_PATH = 'data/processed/finance_data.db'
 
+# Single source of truth for which stocks the dashboard tracks. To add a stock,
+# add one (symbol, name, sector, industry) row here -- TICKERS is derived from
+# it, so the fetch list and the stocks table can never drift apart.
 STOCK_INFO = [
     ('AAPL', 'Apple Inc.', 'Technology', 'Consumer Electronics'),
     ('MSFT', 'Microsoft Corporation', 'Technology', 'Software'),
@@ -66,7 +68,46 @@ STOCK_INFO = [
     ('V', 'Visa Inc.', 'Financial Services', 'Payment Processing'),
     ('PG', 'Procter & Gamble Co.', 'Consumer Staples', 'Household Products'),
     ('DIS', 'The Walt Disney Company', 'Communication Services', 'Entertainment'),
+    # --- Information Technology / Semiconductors ---
+    ('NVDA', 'NVIDIA Corporation', 'Technology', 'Semiconductors'),
+    ('AMD', 'Advanced Micro Devices Inc.', 'Technology', 'Semiconductors'),
+    ('AVGO', 'Broadcom Inc.', 'Technology', 'Semiconductors'),
+    ('INTC', 'Intel Corporation', 'Technology', 'Semiconductors'),
+    ('ORCL', 'Oracle Corporation', 'Technology', 'Software'),
+    ('CRM', 'Salesforce Inc.', 'Technology', 'Software'),
+    # --- Communication Services ---
+    ('NFLX', 'Netflix Inc.', 'Communication Services', 'Streaming'),
+    # --- Health Care ---
+    ('JNJ', 'Johnson & Johnson', 'Health Care', 'Pharmaceuticals'),
+    ('UNH', 'UnitedHealth Group Inc.', 'Health Care', 'Managed Care'),
+    ('PFE', 'Pfizer Inc.', 'Health Care', 'Pharmaceuticals'),
+    ('LLY', 'Eli Lilly and Company', 'Health Care', 'Pharmaceuticals'),
+    # --- Energy ---
+    ('XOM', 'Exxon Mobil Corporation', 'Energy', 'Oil & Gas'),
+    ('CVX', 'Chevron Corporation', 'Energy', 'Oil & Gas'),
+    # --- Consumer Staples ---
+    ('KO', 'The Coca-Cola Company', 'Consumer Staples', 'Beverages'),
+    ('PEP', 'PepsiCo Inc.', 'Consumer Staples', 'Beverages'),
+    ('WMT', 'Walmart Inc.', 'Consumer Staples', 'Retail'),
+    # --- Consumer Discretionary ---
+    ('HD', 'The Home Depot Inc.', 'Consumer Discretionary', 'Home Improvement Retail'),
+    ('NKE', 'Nike Inc.', 'Consumer Discretionary', 'Apparel'),
+    # --- Financials ---
+    ('BAC', 'Bank of America Corporation', 'Financial Services', 'Banks'),
+    ('MA', 'Mastercard Incorporated', 'Financial Services', 'Payment Processing'),
+    # --- Industrials ---
+    ('CAT', 'Caterpillar Inc.', 'Industrials', 'Machinery'),
+    ('BA', 'The Boeing Company', 'Industrials', 'Aerospace & Defense'),
+    # --- Materials ---
+    ('LIN', 'Linde plc', 'Materials', 'Industrial Gases'),
+    # --- Utilities ---
+    ('NEE', 'NextEra Energy Inc.', 'Utilities', 'Electric Utilities'),
+    # --- Real Estate ---
+    ('AMT', 'American Tower Corporation', 'Real Estate', 'REITs'),
 ]
+
+# Derived: the symbols to fetch, in STOCK_INFO order.
+TICKERS = [info[0] for info in STOCK_INFO]
 
 SAMPLE_HOLDINGS = [
     (1, 'AAPL', 100, '2023-01-01', 150.0),
