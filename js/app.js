@@ -671,6 +671,7 @@ function setQuery(query) {
 let myHoldings = [];            // [{symbol, weight}]
 const returnsCache = {};        // symbol -> Map(date -> daily return)
 let marketReturnsCache = null;  // Map(date -> equal-weight market return)
+let lastPortfolioReturns = null; // daily returns of the last calculated portfolio
 
 // --- small stats helpers (mirror python/fetch_real_data.py) ---
 function pfMean(a) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
@@ -797,9 +798,12 @@ function removeHolding(index) {
 
 function clearHoldings() {
     myHoldings = [];
+    lastPortfolioReturns = null;
     renderHoldings();
     document.getElementById('builder-results').innerHTML = '';
     document.getElementById('builder-charts').style.display = 'none';
+    const mc = document.getElementById('mc-section');
+    if (mc) mc.style.display = 'none';
 }
 
 function equalWeightHoldings() {
@@ -893,6 +897,123 @@ function calculatePortfolio() {
     charts.style.display = '';
     drawGrowthChart(dates, rets, market);
     drawAllocationChart(norm);
+
+    // Enable the Monte Carlo section now that we have a portfolio return series.
+    lastPortfolioReturns = rets;
+    const mc = document.getElementById('mc-section');
+    if (mc) mc.style.display = '';
+}
+
+// --- Monte Carlo simulation ---
+// Standard normal via Box-Muller.
+function gaussian() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// Linear-interpolated quantile of an already-sorted ascending array.
+function quantileSorted(sorted, q) {
+    if (!sorted.length) return 0;
+    const r = (q / 100) * (sorted.length - 1);
+    const lo = Math.floor(r), hi = Math.ceil(r);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (r - lo);
+}
+
+function runMonteCarlo() {
+    const out = document.getElementById('mc-results');
+    if (!lastPortfolioReturns || lastPortfolioReturns.length < 30) {
+        out.innerHTML = '<div class="info">Calculate a portfolio above first.</div>';
+        return;
+    }
+    const rets = lastPortfolioReturns;
+    const method = document.getElementById('mc-method').value;
+    const steps = parseInt(document.getElementById('mc-horizon').value, 10);
+    const nPaths = parseInt(document.getElementById('mc-paths').value, 10);
+    const start = Math.max(1, parseFloat(document.getElementById('mc-start').value) || 10000);
+
+    // Calibrate GBM on log returns (daily dt).
+    const logrets = rets.map(r => Math.log(1 + r));
+    const muL = pfMean(logrets), sigL = pfPstdev(logrets);
+
+    // Simulate. Keep every path's value at every step for the fan chart.
+    const stepValues = Array.from({ length: steps + 1 }, () => new Float64Array(nPaths));
+    const finals = new Float64Array(nPaths);
+    for (let p = 0; p < nPaths; p++) {
+        let v = start;
+        stepValues[0][p] = v;
+        for (let t = 1; t <= steps; t++) {
+            const stepRet = method === 'gbm'
+                ? Math.exp(muL + sigL * gaussian()) - 1
+                : rets[(Math.random() * rets.length) | 0];
+            v *= (1 + stepRet);
+            stepValues[t][p] = v;
+        }
+        finals[p] = v;
+    }
+
+    // Percentile bands per step.
+    const qs = [5, 25, 50, 75, 95];
+    const bands = {}; qs.forEach(q => bands[q] = new Array(steps + 1));
+    for (let t = 0; t <= steps; t++) {
+        const sorted = Array.from(stepValues[t]).sort((a, b) => a - b);
+        qs.forEach(q => bands[q][t] = quantileSorted(sorted, q));
+    }
+
+    // Summary on final values.
+    const fsorted = Array.from(finals).sort((a, b) => a - b);
+    const probLoss = finals.reduce((c, v) => c + (v < start ? 1 : 0), 0) / nPaths * 100;
+    const median = quantileSorted(fsorted, 50);
+    const p5 = quantileSorted(fsorted, 5);
+    const p95 = quantileSorted(fsorted, 95);
+    const cut = Math.max(1, Math.floor(nPaths * 0.05));
+    const cvar = pfMean(fsorted.slice(0, cut));  // expected shortfall: mean of worst 5%
+    const pct = v => ((v / start - 1) * 100).toFixed(1);
+    const money = v => '$' + Math.round(v).toLocaleString();
+
+    out.innerHTML = `
+        <div class="metrics-grid">
+            <div class="metric-card"><h3>Probability of Loss</h3><p>${probLoss.toFixed(1)}%</p><span class="label">Ending below ${money(start)}</span></div>
+            <div class="metric-card"><h3>Median Outcome</h3><p>${money(median)}</p><span class="label">${pct(median)}%</span></div>
+            <div class="metric-card"><h3>Downside (5th pct)</h3><p>${money(p5)}</p><span class="label">${pct(p5)}% · 95% confident above</span></div>
+            <div class="metric-card"><h3>Upside (95th pct)</h3><p>${money(p95)}</p><span class="label">${pct(p95)}%</span></div>
+            <div class="metric-card"><h3>Expected Shortfall</h3><p>${money(cvar)}</p><span class="label">Avg of worst 5% (${pct(cvar)}%)</span></div>
+        </div>
+        <div class="info">${nPaths.toLocaleString()} simulated paths over ${steps} trading days
+            (${(steps / 252).toFixed(steps % 252 ? 2 : 0)} yr) via
+            ${method === 'gbm' ? 'Geometric Brownian Motion' : 'historical bootstrap'}.</div>`;
+
+    drawFanChart(steps, bands, start);
+    drawHistogram(fsorted, start);
+}
+
+function drawFanChart(steps, bands, start) {
+    const x = Array.from({ length: steps + 1 }, (_, i) => i);
+    const band = (color) => ({ fill: 'tonexty', fillcolor: color, line: { width: 0 }, type: 'scatter', mode: 'lines', hoverinfo: 'skip', showlegend: false });
+    const traces = [
+        { x, y: bands[5], type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+        Object.assign({ x, y: bands[95], name: '5–95%' }, band('rgba(62,124,140,0.18)')),
+        { x, y: bands[25], type: 'scatter', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
+        Object.assign({ x, y: bands[75], name: '25–75%' }, band('rgba(62,124,140,0.32)')),
+        { x, y: bands[50], type: 'scatter', mode: 'lines', name: 'Median', line: { color: '#C0432B', width: 2 } }
+    ];
+    Plotly.newPlot('mc-fan-chart', traces, Object.assign({}, BASE_LAYOUT, {
+        title: 'Projected portfolio value',
+        xaxis: { title: 'Trading days ahead' },
+        yaxis: { title: 'Value ($)' }
+    }), { responsive: true });
+}
+
+function drawHistogram(fsorted, start) {
+    const traces = [{ x: Array.from(fsorted), type: 'histogram', marker: { color: '#3E7C8C' }, nbinsx: 50, hovertemplate: '%{x:$,.0f}<br>%{y} paths<extra></extra>' }];
+    Plotly.newPlot('mc-hist-chart', traces, Object.assign({}, BASE_LAYOUT, {
+        title: 'Distribution of final values',
+        showlegend: false,
+        xaxis: { title: 'Final value ($)' },
+        yaxis: { title: 'Number of paths' },
+        shapes: [{ type: 'line', x0: start, x1: start, yref: 'paper', y0: 0, y1: 1, line: { color: '#4A3823', width: 1.5, dash: 'dot' } }]
+    }), { responsive: true });
 }
 
 // Cumulative growth of $10,000, portfolio vs equal-weight market benchmark.
