@@ -36,7 +36,6 @@ import json
 import math
 import os
 import sqlite3
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -46,6 +45,9 @@ from datetime import datetime, timedelta, timezone
 YEARS_OF_HISTORY = 10  # both providers serve decades of free daily history
 TRADING_DAYS = 252  # for annualization
 REQUEST_DELAY_SECONDS = 1.0  # be polite between requests
+# Don't rebuild the database unless at least this fraction of tickers returned
+# data; protects the committed DB from transient provider rate-limits/outages.
+MIN_SUCCESS_FRACTION = 0.8
 USER_AGENT = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
               '(KHTML, like Gecko) Chrome/120.0 Safari/537.36')
 # Tiingo is a free, keyed provider. It authenticates by token, so unlike the
@@ -504,16 +506,28 @@ def main():
             failures.append((ticker, str(e)))
             print(f"  {ticker}: FAILED ({e})")
 
-    if not price_data:
-        print("\nERROR: Could not fetch any data. The network may be blocked by "
-              "an egress policy, or Stooq may be unreachable.\n"
-              "Existing database left untouched. To use mock data instead:\n"
-              "  python python/generate_sample_data.py")
-        sys.exit(1)
+    # Guard: never overwrite a good database with a gutted one. A mass failure
+    # is almost always transient (a provider rate-limit or outage), so if too
+    # few tickers came back we keep the existing committed database and skip the
+    # rebuild for this run rather than shrinking the dashboard. A later run
+    # (scheduled or manual) repopulates it once the provider recovers.
+    fetched, total = len(price_data), len(TICKERS)
+    if fetched < MIN_SUCCESS_FRACTION * total:
+        pct = int(MIN_SUCCESS_FRACTION * 100)
+        print(f"\nWARNING: only {fetched}/{total} tickers returned data, below "
+              f"the {pct}% threshold — usually a transient provider rate-limit "
+              "or outage. Keeping the existing database unchanged and skipping "
+              "the rebuild for this run.")
+        if failures:
+            sample = '; '.join(f"{t}: {e}" for t, e in failures[:3])
+            print(f"  First failures: {sample}")
+        print("  (To build mock data offline instead: "
+              "python python/generate_sample_data.py)")
+        return
 
     if failures:
         print(f"\nWARNING: {len(failures)} ticker(s) failed; building DB with the "
-              f"{len(price_data)} that succeeded.")
+              f"{fetched} that succeeded.")
 
     build_database(price_data)
     print(f"\nDatabase built at {DB_PATH} with real market data.")
