@@ -31,7 +31,7 @@ python -m http.server 8000
 This produces the full schema (`stocks`, `prices`, `portfolio_holdings`,
 `stock_risk_metrics`, `portfolio_risk_metrics`) with reproducible mock data.
 
-### Real market data (free, no API key)
+### Real market data (free)
 
 To replace the mock data with **real** prices and risk metrics computed from
 them, run the standalone fetcher (standard library only — no `pandas`,
@@ -42,32 +42,47 @@ python python/fetch_real_data.py
 python -m http.server 8000
 ```
 
-This downloads ~10 years of daily prices for the configured tickers from
-[Stooq](https://stooq.com), a free source that needs **no API key and no
-signup**, then computes volatility, Sharpe ratio, VaR, max drawdown, and beta
-directly from the fetched prices and writes the same database schema the
-dashboard reads. If the network is unavailable it exits cleanly and leaves the
-existing database untouched. (Adjust `YEARS_OF_HISTORY` in the script to change
-the window.)
+It downloads ~10 years of daily prices for the configured tickers, then
+computes volatility, Sharpe ratio, VaR, max drawdown, and beta directly from
+those prices and writes the same database schema the dashboard reads. If every
+provider is unreachable it exits cleanly and leaves the existing database
+untouched. (Adjust `YEARS_OF_HISTORY` in the script to change the window.)
+
+The fetcher tries providers in order until one returns data:
+
+1. **Tiingo** — used first when `TIINGO_API_KEY` is set (see below).
+2. **Stooq**, then **Yahoo Finance** — keyless fallbacks, handy for local runs.
+
+> **Why a key for automation?** The keyless sources (Stooq, Yahoo) block
+> datacenter IPs, so they fail from GitHub Actions runners (HTML block page /
+> HTTP 429). A free Tiingo token authenticates you and works from CI. Running
+> locally from a home connection, the keyless fallbacks are usually fine.
 
 #### Automatic refresh (GitHub Actions)
 
 `.github/workflows/update-data.yml` runs `fetch_real_data.py` on a schedule
 (weekdays, after the US close) and commits the refreshed database back to the
-branch, so GitHub Pages always shows current data. It needs no secrets because
-Stooq is key-free. You can also trigger it manually from the **Actions** tab
-(*Update market data → Run workflow*). Scheduled workflows are paused by GitHub
-after ~60 days of repository inactivity — push a commit or run it manually to
-re-enable.
+branch, so GitHub Pages always shows current data. You can also trigger it from
+the **Actions** tab (*Update market data → Run workflow*).
+
+**One-time setup** — add a free Tiingo token so the scheduled run can fetch:
+
+1. Sign up at [tiingo.com](https://www.tiingo.com) and copy your API token.
+2. In the repo: **Settings → Secrets and variables → Actions → New repository
+   secret**, name it `TIINGO_API_KEY`, paste the token.
+
+(Scheduled workflows are paused by GitHub after ~60 days of repository
+inactivity — push a commit or run it manually to re-enable.)
 
 #### Free data providers
 
 | Provider | API key? | Notes |
 |----------|----------|-------|
-| **Stooq** (default) | No | No signup; daily OHLCV via CSV. Used by `fetch_real_data.py`. |
-| Yahoo Finance (`yfinance`) | No | Unofficial; rate-limited/blocked at times. Used by the legacy `download_data.py`. |
+| [Tiingo](https://www.tiingo.com) | Yes (free) | Used first when `TIINGO_API_KEY` is set. Generous free tier, good EOD history, works from CI. |
+| **Stooq** | No | No signup; daily OHLCV via CSV. Keyless fallback; blocks datacenter IPs. |
+| Yahoo Finance | No | Keyless fallback (chart API). Rate-limits datacenter IPs. |
+| [Twelve Data](https://twelvedata.com) | Yes (free) | ~800 requests/day; alternative keyed option. |
 | [Alpha Vantage](https://www.alphavantage.co) | Yes (free) | 25 requests/day on the free tier. |
-| [Tiingo](https://www.tiingo.com) | Yes (free) | Generous free tier; good EOD history. |
 | [Twelve Data](https://twelvedata.com) | Yes (free) | ~800 requests/day on the free tier. |
 
 To switch providers, edit only the `fetch_prices()` function in
@@ -146,11 +161,11 @@ risky-business/
 
 ## Data Sources
 
-- **Stooq** (default for `fetch_real_data.py`): Free daily prices, no API key
-- **Yahoo Finance** (legacy `download_data.py`): Historical prices via `yfinance`
-- Other free options (Alpha Vantage, Tiingo, Twelve Data) — see
-  [Real market data](#real-market-data-free-no-api-key) for the comparison
-  table and how to swap providers
+- **Tiingo** (keyed, used first by `fetch_real_data.py` when `TIINGO_API_KEY`
+  is set): free daily EOD prices, works from CI
+- **Stooq** / **Yahoo Finance**: keyless fallbacks for local runs
+- See [Real market data](#real-market-data-free) for the provider comparison
+  table and setup
 
 ## Customization
 

@@ -34,6 +34,10 @@ jobs:
           python-version: '3.x'
 
       - name: Fetch real market data (stdlib only, no dependencies)
+        env:
+          # Keyless sources (Stooq/Yahoo) block CI IPs, so CI uses Tiingo.
+          # Add a free token at Settings -> Secrets -> Actions -> TIINGO_API_KEY.
+          TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
         run: python python/fetch_real_data.py
 
       - name: Commit updated database if it changed
